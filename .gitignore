@@ -1,0 +1,29 @@
+# Віртуальне середовище (завжди ігноруємо)
+venv/
+env/
+ENV/
+.venv/
+
+# Кеш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Дистрибутиви та пакунки
+dist/
+build/
+*.egg-info/
+
+# Файли конфігурації 
+.env
+
+# відео/аудіо 
+*.mp4
+*.mp3
+*.wav
+/temp_audio/
+/output/
+
+# Налаштування IDE
+.vscode/
+.idea/
