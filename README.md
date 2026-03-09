@@ -47,11 +47,11 @@ python dubbing_test.py
 
 [x] Dynamic time-stretching for audio sync
 
-[ ] Integration of zero-shot voice cloning
+[] Integration of zero-shot voice cloning
 
-[ ] Development of a web-based GUI
+[] Development of a web-based GUI
 
-[ ] Implementation of Wav2Lip for visual synchronization
+[] Implementation of Wav2Lip for visual synchronization
 
 ## 📜 License
 This project is licensed under the MIT License - see the LICENSE file for details.
