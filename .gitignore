@@ -23,6 +23,7 @@ build/
 *.wav
 /temp_audio/
 /output/
+/archive/
 
 # Налаштування IDE
 .vscode/
