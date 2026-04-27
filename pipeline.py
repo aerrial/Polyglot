@@ -10,7 +10,7 @@ from audio.mixing import mix_audio
 from video.processing import process_voice_segment, assemble_final_video
 from moviepy import VideoFileClip
 
-async def run_localization_pipeline(video_path, target_lang="en"):
+async def run_localization_pipeline(video_path, target_lang="en", progress_callback=None):
     # 1. Підготовка аудіо
     video = VideoFileClip(video_path)
     temp_audio = "temp_orig.mp3"
@@ -21,6 +21,11 @@ async def run_localization_pipeline(video_path, target_lang="en"):
     # 2. Аналіз та переклад
     segments = transcribe_audio(vocals_path)
     translated = translate_segments(segments, target_lang)
+
+    for i, seg in enumerate(translated):
+        if progress_callback:
+            percent = 30 + int((i / len(translated)) * 50) # Прогрес від 30% до 80%
+            progress_callback(percent)
     
     # 3. Синтез голосу
     voice_clips = []
