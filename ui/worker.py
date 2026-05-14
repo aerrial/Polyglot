@@ -31,22 +31,14 @@ class DubbingWorker(QThread):
 
     async def execute(self):
         def progress_callback(data):
-            if isinstance(data, tuple) and data[0] == "WAIT_FOR_EDIT":
-                # Синхронізуємо дані з UI
-                pipeline.shared_data["segments"] = data[1]
-                self.edit_required_signal.emit(data[1])
+            if isinstance(data, tuple):
+                if data[0] == "WAIT_FOR_EDIT":
+                    pipeline.shared_data["segments"] = data[1]
+                    self.edit_required_signal.emit(data[1])
+                elif data[0] == "SPEAKERS_LOADED":
+                    # Тут можна додати новий сигнал, але поки просто виведемо в лог
+                    self.log_signal.emit(f"Detected {len(data[1])} speakers")
             elif isinstance(data, int):
                 self.progress_signal.emit(data)
             elif isinstance(data, str):
                 self.log_signal.emit(data)
-
-        # Чекаємо завершення всього пайплайну
-        await pipeline.run_localization_pipeline(
-            self.video_path, 
-            self.target_path, 
-            self.target_lang_code, 
-            progress_callback
-        )
-        
-        # Сигнал про фініш тільки ПІСЛЯ завершення методу
-        self.finished_signal.emit("Успішно завершено!")

@@ -84,6 +84,10 @@ async def run_localization_pipeline(video_path, output_path, target_lang_code, p
     for seg in segments:
         seg.gender = speaker_genders.get(seg.speaker, "Female")
 
+    if progress_callback:
+    # Надсилаємо дані про спікерів у форматі ("SPEAKERS_LOADED", dict)
+       progress_callback(("SPEAKERS_LOADED", speaker_to_voice_map))
+
     # 4.5 РОЗПОДІЛ КОНКРЕТНИХ ГОЛОСІВ МІЖ СПІКЕРАМИ
     speaker_to_voice_map = {}
     for spk_id, gender in speaker_genders.items():
