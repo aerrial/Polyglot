@@ -1,100 +1,144 @@
+import os
 import sys
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QProgressBar, QTextEdit, QFileDialog, QLabel
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import (QMainWindow, QPushButton, QVBoxLayout, 
+                               QWidget, QFileDialog, QProgressBar, 
+                               QPlainTextEdit, QLabel, QComboBox)
 from ui.worker import DubbingWorker
-
-class StreamToLogger(QObject):
-    """Клас для перенаправлення stdout у сигнал Qt"""
-    new_text = Signal(str)
-
-    def write(self, text):
-        if text.strip(): # ігноруємо пусті рядки
-            self.new_text.emit(str(text))
-
-    def flush(self):
-        # Потрібно для сумісності з sys.stdout
-        pass
+import pipeline
+import config
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI Video Dubbing Tool")
-        self.setMinimumSize(800, 600)
-
-        # Зберігаємо шлях до обраного відео тут
-        self.selected_path = None
-
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
-
-        # 1. Секція вибору файлу
-        self.label_path = QLabel("Файл не обрано")
-        self.btn_select = QPushButton("📁 Обрати відео")
-        layout.addWidget(self.label_path)
-        layout.addWidget(self.btn_select)
-
-        # 2. Кнопка запуску
-        self.btn_run = QPushButton("🚀 Запустити локалізацію")
-        self.btn_run.setEnabled(False) # Вимкнена, поки не обрано файл
-        layout.addWidget(self.btn_run)
-
-        # 3. Прогрес-бар (FR-008)
-        self.progress = QProgressBar()
-        layout.addWidget(self.progress)
-
-        # 4. Консоль логів (FR-009)
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        layout.addWidget(self.log_output)
-
-        # Створюємо перехоплювач
-        self.stream_logger = StreamToLogger()
-        self.stream_logger.new_text.connect(self.log_output.append)
-
-        # Перенаправляємо stdout (звичайні print) та stderr (помилки)
-        sys.stdout = self.stream_logger
-        sys.stderr = self.stream_logger
-
-        # З'єднання сигналів
-        self.btn_select.clicked.connect(self.select_file)
-        self.btn_run.clicked.connect(self.start_processing)
-
-    def select_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Оберіть відео", "", "Video Files (*.mp4 *.mkv)")
-        if file_path:
-            self.selected_path = file_path
-            self.label_path.setText(f"Файл: {file_path}")
-            self.btn_run.setEnabled(True) # Тепер можна запускати
-            self.log_output.append(f"✅ Обрано файл: {file_path}")
-
-    def start_processing(self):
-        # Тепер ми беремо шлях зі змінної, а не з неіснуючого поля
-        if not self.selected_path:
-            return
-
-        self.btn_run.setEnabled(False)
-        self.btn_select.setEnabled(False)
-        self.log_output.append("<b>⏳ Починаю обробку...</b>")
-
-        # Створюємо та запускаємо воркер
-        self.worker = DubbingWorker(self.selected_path, "en") # "en" можна замінити на вибір з ComboBox
+        self.setWindowTitle("PolyGlot")
+        self.resize(600, 500)
         
-        # Підключаємо сигнали з worker.py
-        self.worker.progress_signal.connect(self.progress.setValue)
-        self.worker.log_signal.connect(self.log_output.append)
-        self.worker.finished_signal.connect(self.on_finished)
-        self.worker.error_signal.connect(self.on_error)
+        # Сховище для даних
+        self.input_file = ""
+        self.output_file = ""
+        
+        # UI Елементи
+        layout = QVBoxLayout()
+        
+        # 1. Вибір файлів 
+        self.btn_input = QPushButton("Обрати відео")
+        self.btn_input.clicked.connect(self.select_input)
+        
+        self.btn_output = QPushButton("Куди зберегти результат")
+        self.btn_output.clicked.connect(self.select_output)
+        
+        # 2. Налаштування 
+        self.combo_lang = QComboBox()
+        self.combo_lang.addItems(list(config.SUPPORTED_LANGUAGES.keys()))
+        
+        # 3. Моніторинг 
+        self.progress = QProgressBar()
+        self.log_console = QPlainTextEdit()
+        self.log_console.setReadOnly(True)
+        
+        # 4. РЕДАКТОР ТРАНСКРИПЦІЇ 
+        self.label_edit = QLabel("Відредагуйте текст (якщо потрібно):")
+        self.edit_area = QPlainTextEdit()
+        self.btn_confirm_edit = QPushButton("Підтвердити текст та продовжити")
+        self.btn_confirm_edit.setEnabled(False)
+        self.btn_confirm_edit.clicked.connect(self.confirm_edit)
+        
+        self.btn_run = QPushButton("ЗАПУСТИТИ ЛОКАЛІЗАЦІЮ")
+        self.btn_run.clicked.connect(self.start_process)
 
+# 
+        # Додаємо все в лейаут
+        for w in [self.btn_input, self.btn_output, QLabel("Оберіть мову:"), 
+                  self.combo_lang, self.btn_run, self.progress, 
+                  self.log_console, self.label_edit, self.edit_area, self.btn_confirm_edit]:
+            layout.addWidget(w)
+            
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    # --- ЛОГІКА ТЕСТ-КЕЙСІВ ---
+
+    def select_input(self):
+    # Отримуємо шлях до файлу. QFileDialog повертає кортеж (шлях, фільтр)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Обрати відео", "", "Video (*.mp4 *.mkv *.avi)")
+        
+        if file_path:
+            self.input_file = file_path  # ОНОВЛЮЄМО ЗМІННУ КЛАСУ
+            self.log_console.appendPlainText(f"📂 Обрано файл: {file_path}")
+            # Можна також вивести назву файлу на кнопку або мітку
+            self.btn_input.setText(f"Файл: {os.path.basename(file_path)}")
+        else:
+            self.log_console.appendPlainText("⚠️ Файл не було обрано")
+
+    def select_output(self):
+        # Відкриваємо діалог збереження файлу
+        file_path, _ = QFileDialog.getSaveFileName(self, "Зберегти результат як...", "", "Video (*.mp4)")
+
+        if file_path:
+            self.output_file = file_path
+            self.log_console.appendPlainText(f"💾 Файл результату: {file_path}")
+            self.btn_output.setText(f"Зберегти в: {os.path.basename(file_path)}")
+
+    def start_process(self):
+        print(f"DEBUG: input_file = {self.input_file}")
+        if not self.input_file:
+            self.log_console.appendPlainText("Помилка: оберіть файли!")
+            return
+            
+        target_lang_name = self.combo_lang.currentText()
+        target_lang_code = config.SUPPORTED_LANGUAGES[target_lang_name]
+
+        # Передаємо в воркер тільки код мови
+        self.worker = DubbingWorker(
+            self.input_file, 
+            self.output_file, 
+            target_lang_code
+        )
+        
+        # Підключення сигналів 
+        self.worker.progress_signal.connect(self.progress.setValue)
+        self.worker.log_signal.connect(self.log_console.appendPlainText)
+        
+        # Обробка запиту на редагування 
+        self.worker.edit_required_signal.connect(self.handle_edit_request)
+        
         self.worker.start()
 
-    def on_finished(self, message):
-        self.log_output.append(f"<span style='color: green;'>{message}</span>")
-        self.btn_run.setEnabled(True)
-        self.btn_select.setEnabled(True)
+    def handle_edit_request(self, segments):
+        # Перетворюємо об'єкти сегментів у текст для редагування
+        full_text = "\n".join([s.text for s in segments])
+        self.edit_area.setPlainText(full_text)
+        self.btn_confirm_edit.setEnabled(True)
+        self.log_console.appendPlainText("⚠️ ПАУЗА: Перевірте текст у полі редагування.")
 
-    def on_error(self, error_traceback):
-        self.log_output.append(f"<span style='color: red;'>❌ ПОМИЛКА:</span>\n{error_traceback}")
-        self.btn_run.setEnabled(True)
-        self.btn_select.setEnabled(True)
+    def confirm_edit(self):
+        import pipeline
+        # 1. Оновлюємо дані в shared_data
+        # Беремо текст з текстового поля і розбиваємо на рядки
+        new_text_lines = self.edit_area.toPlainText().split("\n")
+        
+        # Тепер 'pipeline' точно визначено
+        if pipeline.shared_data["segments"]:
+            for i, line in enumerate(new_text_lines):
+                if i < len(pipeline.shared_data["segments"]):
+                    pipeline.shared_data["segments"][i].text = line.strip()
+    
+        # 2. Передача сигналу воркеру
+        if hasattr(self, 'worker') and self.worker.loop and pipeline._current_event:
+            self.log_console.appendPlainText("✅ Текст підтверджено. Продовжую роботу...")
+            # Використовуємо безпечний виклик сигналу
+            self.worker.loop.call_soon_threadsafe(pipeline._current_event.set)
+        else:
+            self.log_console.appendPlainText("⚠️ Помилка: Не вдалося знайти активний процес або подію.")
+    
+        self.btn_confirm_edit.setEnabled(False)
 
+    def rebuild_segments(self, new_texts):
+        # Проста логіка заміни тексту в існуючих сегментах
+        # (в реальному коді тут треба мапити по індексах)
+        if pipeline.shared_data["segments"]:
+            for i, text in enumerate(new_texts):
+                if i < len(pipeline.shared_data["segments"]):
+                    pipeline.shared_data["segments"][i].text = text
+        return pipeline.shared_data["segments"]

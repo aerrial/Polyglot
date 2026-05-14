@@ -1,10 +1,35 @@
 # ml/tts.py
+import asyncio
 import edge_tts
-import config
+import logging
+import os
 
-async def generate_voice(text, output_path, voice=config.DEFAULT_VOICE_MALE, rate="+0%"):
-    """Генерує аудіофайл із тексту за допомогою Edge-TTS."""
-    print(f"🎙️ Синтез мовлення (Edge-TTS): {voice}...")
-    communicate = edge_tts.Communicate(text, voice, rate=rate)
-    await communicate.save(output_path)
-    return output_path
+logger = logging.getLogger(__name__)
+
+
+async def generate_voice(text, output_path, voice):
+    for attempt in range(3):
+        try:
+            communicate = edge_tts.Communicate(text, voice)
+
+            await asyncio.wait_for(
+                communicate.save(output_path),
+                timeout=20
+            )
+
+            if not os.path.exists(output_path):
+                raise RuntimeError("TTS output missing")
+
+            if os.path.getsize(output_path) == 0:
+                raise RuntimeError("TTS output empty")
+
+            return True
+
+        except Exception as e:
+            logger.warning(
+                f"TTS attempt {attempt + 1} failed: {e}"
+            )
+
+            await asyncio.sleep(1)
+
+    return False

@@ -4,6 +4,8 @@ import config
 from pipeline import run_localization_pipeline
 from ui.main_window import MainWindow
 from PySide6.QtWidgets import QApplication
+import os
+os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 
 async def main():
     print("🚀 Початок роботи системи локалізації відео...")
