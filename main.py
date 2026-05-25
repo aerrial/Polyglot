@@ -1,23 +1,28 @@
-# main.py
+import sys
 import asyncio
-import config
-from pipeline import run_localization_pipeline
-from ui.main_window import MainWindow
-from PySide6.QtWidgets import QApplication
 import os
+from PySide6.QtWidgets import QApplication
+from qasync import QEventLoop
+from ui.main_window import PolyGlotWindow  # Переконайся, що назва файлу та класу вірні
+
+# Вимикаємо симлінки для HuggingFace, як ти і робила
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 
-async def main():
-    print("🚀 Початок роботи системи локалізації відео...")
-    # Тут можна додати логіку вибору мови через input()
-    await run_localization_pipeline(config.VIDEO_FILE, target_lang="en")
+def main():
+    # 1. Створюємо стандартний додаток Qt
+    app = QApplication(sys.argv)
+
+    # 2. Створюємо спеціальний цикл подій, який поєднує Qt та Asyncio
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    # 3. Ініціалізуємо твоє головне вікно
+    window = PolyGlotWindow()
+    window.show()
+
+    # 4. Запускаємо систему через цей поєднаний цикл
+    with loop:
+        loop.run_forever()
 
 if __name__ == "__main__":
-    app = QApplication([])
-    window = MainWindow()
-    with open("ui/style.qss", "r") as f:
-        app.setStyleSheet(f.read())
-    window.show()
-    app.exec()
-
-    
+    main()

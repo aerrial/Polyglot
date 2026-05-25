@@ -1,6 +1,7 @@
 # config.py
 import os
 
+HF_TOKEN = os.getenv("HF_TOKEN")
 # Базові шляхи
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 

@@ -86,7 +86,7 @@ async def run_localization_pipeline(video_path, output_path, target_lang_code, p
 
     if progress_callback:
     # Надсилаємо дані про спікерів у форматі ("SPEAKERS_LOADED", dict)
-       progress_callback(("SPEAKERS_LOADED", speaker_to_voice_map))
+        progress_callback(("SPEAKERS_LOADED", speaker_to_voice_map))
 
     # 4.5 РОЗПОДІЛ КОНКРЕТНИХ ГОЛОСІВ МІЖ СПІКЕРАМИ
     speaker_to_voice_map = {}
