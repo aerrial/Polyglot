@@ -1,42 +1,31 @@
 # services/translate_service.py
+import asyncio
 from deep_translator import GoogleTranslator
-from typing import List
 from core.project import TimelineSegment
 
 class TranslateService:
     def __init__(self):
-        # Ми ініціалізуємо перекладач безпосередньо під час виклику, 
-        # щоб динамічно змінювати мови
         pass
 
-    async def process(self, segments: List[TimelineSegment], target_lang: str, source_lang: str = 'auto'):
-        """
-        Перекладає список сегментів.
-        Оновлює поле translated_text прямо в об'єктах.
-        """
-        if not segments:
-            return segments
-
+    async def translate_text(self, text: str, target_lang: str = "en") -> str:
+        """Перекладає один окремий рядок тексту (Пункт 2)"""
+        if not text.strip():
+            return ""
         try:
-            translator = GoogleTranslator(source=source_lang, target=target_lang)
-            
-            # Збираємо всі тексти в один список для пакетного перекладу
-            texts_to_translate = [seg.original_text for seg in segments]
-            
-            # Виконуємо переклад (batch)
-            translated_texts = translator.translate_batch(texts_to_translate)
-            
-            # Оновлюємо об'єкти
-            for seg, translation in zip(segments, translated_texts):
-                seg.translated_text = translation
-                seg.status = "translated"
-                
-            return segments
-            
+            # Виконуємо синхронний переклад у фоновому потоці, щоб не блокувати асинхронне ядро
+            translated = await asyncio.to_thread(
+                lambda: GoogleTranslator(source='auto', target=target_lang).translate(text)
+            )
+            return translated if translated else text
         except Exception as e:
-            print(f"❌ Помилка перекладу: {e}")
-            # У разі помилки копіюємо оригінал, щоб пайплайн не зупинився
-            for seg in segments:
-                if not seg.translated_text:
-                    seg.translated_text = seg.original_text
-            return segments
+            print(f"[Translate] Помилка перекладу рядка: {e}")
+            return text
+
+    async def process(self, segments: list[TimelineSegment], target_lang: str = "en"):
+        """Пакетний переклад усіх сегментів на Фазі 1"""
+        print(f"[Translate] Початок пакетного перекладу {len(segments)} сегментів...")
+        for seg in segments:
+            if seg.original_text:
+                seg.translated_text = await self.translate_text(seg.original_text, target_lang)
+                # Оскільки це первинний автоматичний переклад, статус залишається transcribed
+                seg.status = "transcribed"
