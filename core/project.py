@@ -19,42 +19,35 @@ class TimelineSegment:
     status: str = "pending"  # 'pending', 'transcribed', 'modified', 'rendered'
 
     def is_modified(self) -> bool:
-        """Повертає True, якщо сегмент був змінений користувачем"""
         return self.status == "modified"
 
     @property
     def duration(self) -> float:
-        """Обчислення чистої тривалості репліки в секундах"""
         return self.end - self.start
 
 
 class Project:
     def __init__(self, video_path: str, source_lang: str = "auto", target_lang: str = "en"):
-        self.video_path = video_path
-        self.project_name = os.path.basename(video_path).split('.')[0]
+        self.video_path = os.path.abspath(video_path)
+        self.project_name = os.path.splitext(os.path.basename(video_path))[0]
         
-        # Мовні налаштування
         self.source_lang = source_lang 
         self.target_lang = target_lang 
         
         self.vocals_path: Optional[str] = None
         self.background_path: Optional[str] = None
         self.segments: List[TimelineSegment] = []
-        self.output_video_path = settings.OUTPUT_FILE
+        self.output_video_path = os.path.abspath(settings.OUTPUT_FILE)
         self.speaker_voice_map: dict = {}
 
     def add_segment(self, segment: TimelineSegment):
-        """Додавання нового сегмента до списку таймлайну"""
         self.segments.append(segment)
 
     def get_modified_segments(self) -> List[TimelineSegment]:
-        """Фільтрація черги сегментів для алгоритму Partial Rerender"""
         return [seg for seg in self.segments if seg.status == "modified"]
 
     def save_to_json(self, filename: Optional[str] = None) -> str:
-        """Зберігає весь стан проєкту (включаючи картки тексту) у JSON файл"""
         if not filename:
-            # Створюємо файл із назвою проєкту в папці з програмою
             filename = f"projects/{self.project_name}_data.json"
             
         os.makedirs("projects", exist_ok=True)
@@ -68,7 +61,6 @@ class Project:
             "background_path": self.background_path,
             "output_video_path": self.output_video_path,
             "speaker_voice_map": self.speaker_voice_map,
-            # Конвертуємо список датакласів у список словників
             "segments": [asdict(seg) for seg in self.segments]
         }
         
@@ -80,11 +72,9 @@ class Project:
 
     @classmethod
     def load_from_json(cls, filename: str) -> 'Project':
-        """Відновлює проєкт разом з усіма відредагованими картками з JSON файлу"""
         with open(filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
-        # Створюємо чистий об'єкт проєкту
         project = cls(data["video_path"], data["source_lang"], data["target_lang"])
         project.project_name = data["project_name"]
         project.vocals_path = data["vocals_path"]
@@ -92,10 +82,10 @@ class Project:
         project.output_video_path = data["output_video_path"]
         project.speaker_voice_map = data.get("speaker_voice_map", {})
         
-        # Відновлюємо сегменти
+        project.segments.clear()
         for seg_dict in data["segments"]:
             segment = TimelineSegment(**seg_dict)
             project.add_segment(segment)
             
-        print(f"[Project] Проєкт {project.project_name} успішно відновлено з архіву.")
+        print(f"[Project] Проєкт {project.project_name} успішно відновлено.")
         return project

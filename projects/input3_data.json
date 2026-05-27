@@ -1,0 +1,112 @@
+{
+    "video_path": "C:\\unik\\diplom\\data\\input3.mp4",
+    "project_name": "input3",
+    "source_lang": "auto",
+    "target_lang": "en",
+    "vocals_path": "c:\\unik\\diplom\\output\\demucs_output\\input3_vocals.wav",
+    "background_path": "c:\\unik\\diplom\\output\\demucs_output\\input3_no_vocals.wav",
+    "output_video_path": "c:\\unik\\diplom\\output\\translated_video.mp4",
+    "speaker_voice_map": {
+        "SPEAKER_00": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_00.wav",
+        "SPEAKER_02": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_02.wav",
+        "SPEAKER_01": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_01.wav"
+    },
+    "segments": [
+        {
+            "id": 0,
+            "start": 0.0,
+            "end": 4.86,
+            "original_text": "Як ви ставитесь до ідеї заборонити аборти на законодавчому рівні?",
+            "translated_text": "How do you feel about the idea of ​​banning abortion at the legislative level?",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_0.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 1,
+            "start": 5.08,
+            "end": 12.3,
+            "original_text": "Звісно, погано, тому що багато хто зараз може завагітнійти в дуже ранньому віці, навіть не досягнувши 18 років.",
+            "translated_text": "It's bad, of course, because many people can now get pregnant at a very young age, before they even reach 18.",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_1.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 2,
+            "start": 12.46,
+            "end": 22.8,
+            "original_text": "І це може повпливати на життя. Ти не встиг сам вирісти, тобі потрібно вирощувати дитину, тобі потрібно думати про те, як її поставити на ноги, а ти ще з себе нічого не представляєш.",
+            "translated_text": "And it can affect life. You didn't have time to grow up yourself, you need to raise a child, you need to think about how to put it on its feet, and you still don't represent anything of yourself.",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_2.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 3,
+            "start": 22.8,
+            "end": 34.24,
+            "original_text": "Негативно. Це, по-перше, дуже дивно звучить, як для мене, для сучасної людини, тому що це право людини на медицину.",
+            "translated_text": "Negatively. This, first of all, sounds very strange to me, to a modern person, because this is a human right to medicine.",
+            "speaker_id": "SPEAKER_02",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_3.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 4,
+            "start": 34.44,
+            "end": 40.66,
+            "original_text": "По-друге, аборти, якщо їх заборонити, будуть перезводити до багатьох небажаних наслідків, як то від.",
+            "translated_text": "Secondly, abortions, if they are banned, will lead to many undesirable consequences, such as",
+            "speaker_id": "SPEAKER_02",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_4.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 5,
+            "start": 40.86,
+            "end": 47.92,
+            "original_text": "Того, що жінки все одно будуть робити аборти, але нелегально, більш небезпечно до того, що будуть більше дітей, які нікому не потрібні.",
+            "translated_text": "The fact that women will still have abortions, but illegally, is more dangerous than the fact that there will be more children that no one wants.",
+            "speaker_id": "SPEAKER_02",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_5.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 6,
+            "start": 47.92,
+            "end": 56.42,
+            "original_text": "На мою думку, аборт – це гріх, але все рівно ми люди, ми грішні, ми не є Господом, ми не можемо творити те, чого він воліє.",
+            "translated_text": "In my opinion, abortion is a sin, but we are human beings, we are sinners, we are not God, we cannot do what he wants.",
+            "speaker_id": "SPEAKER_01",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_6.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 7,
+            "start": 56.6,
+            "end": 59.76,
+            "original_text": "Нам не відомо, чи Господь навіть в матеріальній сущності існує.",
+            "translated_text": "We do not know whether the Lord exists even in the material essence.",
+            "speaker_id": "SPEAKER_01",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_7.wav",
+            "status": "rendered"
+        }
+    ]
+}

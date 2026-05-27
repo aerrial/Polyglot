@@ -28,21 +28,59 @@ class Panel(QFrame):
         self.body = QVBoxLayout()
         layout.addLayout(self.body)
 
+class SpeakerRowWidget(QWidget):
+    def __init__(self, speaker_id: str, gender: str, ref_wav: str, parent_window):
+        super().__init__()
+        self.speaker_id = speaker_id
+        self.gender = gender
+        self.ref_wav = ref_wav
+        self.parent_window = parent_window
+        self.init_ui()
 
-# ПУНКТ 1 та 2: Кастомна інтерактивна двомовна картка сегмента
+    def init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        
+        icon = "👨" if self.gender == "Male" else "👩"
+        lbl_icon = QLabel(icon)
+        lbl_icon.setStyleSheet("font-size: 16px;")
+        
+        lbl_name = QLabel(f"Спікер: {self.speaker_id}")
+        lbl_name.setStyleSheet("font-weight: bold; color: #E0E0E0; font-size: 13px;")
+        
+        self.btn_play_ref = QPushButton("🎵 Зразок")
+        self.btn_play_ref.setFixedWidth(85)
+        self.btn_play_ref.setStyleSheet("""
+            QPushButton { 
+                background: #252526; border: 1px solid #3F3F46; border-radius: 4px; color: #CCCCCC; font-size: 11px; padding: 4px 8px; 
+            }
+            QPushButton:hover { background: #3F3F46; border-color: #8B7CFF; color: #FFFFFF; }
+        """)
+        self.btn_play_ref.clicked.connect(self.play_speaker_sample)
+        
+        layout.addWidget(lbl_icon)
+        layout.addWidget(lbl_name)
+        layout.addStretch()
+        layout.addWidget(self.btn_play_ref)
+
+    def play_speaker_sample(self):
+        # Виклик оптимізованого єдиного плеєра головного вікна
+        self.parent_window.play_shared_sample(self.ref_wav, self.speaker_id)
+
+
 class SegmentCardWidget(QWidget):
     def __init__(self, segment: TimelineSegment, controller: LocalizationController, parent_window):
         super().__init__()
         self.segment = segment
         self.controller = controller
-        self.parent_window = parent_window # Для надсилання логів
+        self.parent_window = parent_window 
+        self.translation_timer = None # Для механізму Debounce
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(4, 4, 4, 4)
 
-        # Метадані репліки (Час та Спікер)
         meta_layout = QHBoxLayout()
         time_str = f"🕒 {int(self.segment.start // 60):02}:{int(self.segment.start % 60):02}"
         lbl_meta = QLabel(f"{time_str} | {self.segment.speaker_id} ({self.segment.gender})")
@@ -51,16 +89,13 @@ class SegmentCardWidget(QWidget):
         meta_layout.addStretch()
         main_layout.addLayout(meta_layout)
 
-        # Поля редагування тексту
         fields_layout = QHBoxLayout()
         
-        # 1. Поле Оригіналу
         self.edit_orig = QTextEdit(self.segment.original_text)
         self.edit_orig.setFixedHeight(50)
         self.edit_orig.setStyleSheet("background: #111; border: 1px solid #222; color: #aaa;")
         self.edit_orig.textChanged.connect(self.on_original_changed)
         
-        # 2. Поле Перекладу
         self.edit_trans = QTextEdit(self.segment.translated_text)
         self.edit_trans.setFixedHeight(50)
         self.edit_trans.setStyleSheet("background: #222; border: 1px solid #333; color: #fff;")
@@ -71,34 +106,33 @@ class SegmentCardWidget(QWidget):
         main_layout.addLayout(fields_layout)
 
     def on_translation_changed(self):
-        """Слот для Пункту 1: Користувач редагує переклад"""
         new_text = self.edit_trans.toPlainText()
         if self.segment.translated_text != new_text:
             self.segment.translated_text = new_text
-            self.segment.status = "modified" # Маркуємо для Partial Rerender
+            self.segment.status = "modified" 
 
     def on_original_changed(self):
-        """Слот для Пункту 2: Редагування оригіналу викликає автопереклад"""
         new_orig = self.edit_orig.toPlainText()
         if self.segment.original_text != new_orig:
             self.segment.original_text = new_orig
             self.segment.status = "modified"
-            # Запускаємо асинхронний тасок перекладу однієї репліки, щоб UI не зависав
-            asyncio.create_task(self.trigger_single_translation(new_orig))
+            
+            # Реалізація Debounce: скидаємо таску, якщо користувач продовжує друкувати
+            if self.translation_timer:
+                self.translation_timer.cancel()
+            self.translation_timer = asyncio.get_event_loop().call_later(
+                0.8, lambda: asyncio.create_task(self.trigger_single_translation(new_orig))
+            )
 
     async def trigger_single_translation(self, text):
+        if not text.strip(): return
         try:
-            # Тимчасово блокуємо сигнал, щоб не було зациклення
             self.edit_trans.textChanged.disconnect(self.on_translation_changed)
-            
-            # Викликаємо сервіс перекладу через контролер для одного сегмента
             translated = await self.controller.translate_service.translate_text(
                 text, self.controller.project.target_lang
             )
             self.segment.translated_text = translated
             self.edit_trans.setPlainText(translated)
-            
-            # Повертаємо сигнал назад
             self.edit_trans.textChanged.connect(self.on_translation_changed)
         except Exception as e:
             print(f"Помилка поштучного перекладу: {e}")
@@ -114,6 +148,11 @@ class PolyGlotWindow(QMainWindow):
         self.media_player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
+
+        # Єдиний шеринг-плеєр для прослуховування зразків голосу (Оптимізація пам'яті)
+        self.sample_player = QMediaPlayer()
+        self.sample_audio_output = QAudioOutput()
+        self.sample_player.setAudioOutput(self.sample_audio_output)
 
         self.setup_ui()
         self.apply_styles()
@@ -190,7 +229,6 @@ class PolyGlotWindow(QMainWindow):
         self.media_player.setVideoOutput(self.video_widget)
         mid_layout.addWidget(self.video_widget, stretch=5)
         
-        # ПУНКТ 7: Розширений стандартний медіаплеєр
         player_controls = QHBoxLayout()
         self.play_btn = QPushButton("▶")
         self.play_btn.setFixedWidth(50)
@@ -208,7 +246,6 @@ class PolyGlotWindow(QMainWindow):
         player_controls.addWidget(self.lbl_time)
         mid_layout.addLayout(player_controls)
 
-        # Синхронізація слайдера з плеєром
         self.media_player.positionChanged.connect(self.on_player_position_changed)
         self.media_player.durationChanged.connect(self.on_player_duration_changed)
 
@@ -226,8 +263,15 @@ class PolyGlotWindow(QMainWindow):
         right_layout.setContentsMargins(0,0,0,0)
 
         self.speaker_panel = Panel("Speaker Inspector")
+        self.speaker_list = QListWidget()
+        self.speaker_list.setStyleSheet("""
+            QListWidget { background: #121212; border: 1px solid #27272A; border-radius: 6px; }
+            QListWidget::item { background: #18181B; margin: 4px 8px; border-radius: 4px; border: 1px solid #27272A; }
+            QListWidget::item:hover { border-color: #3F3F46; }
+        """)
+        self.speaker_panel.body.addWidget(self.speaker_list)
+
         self.pipeline_panel = Panel("AI Pipeline Progress")
-        
         self.progress_widgets = {}
         for step in ["Overall", "Audio", "STT", "Translate", "Synthesis"]:
             lbl = QLabel(f"{step} Process:")
@@ -244,7 +288,6 @@ class PolyGlotWindow(QMainWindow):
         self.main_splitter.addWidget(mid_container)
         self.main_splitter.addWidget(right_container)
         self.main_splitter.setStretchFactor(1, 4)
-
         content_layout.addWidget(self.main_splitter)
         main_layout.addWidget(content)
 
@@ -253,31 +296,63 @@ class PolyGlotWindow(QMainWindow):
             self.controller.status_changed.connect(self.add_log)
             self.controller.sync_required.connect(self.fill_transcript)
             
-            # ПУНКТ 8: Прив'язка індивідуальних прогрес-барів
             self.controller.overall_progress.connect(self.progress_widgets["Overall"].setValue)
             self.controller.audio_progress.connect(self.progress_widgets["Audio"].setValue)
             self.controller.stt_progress.connect(self.progress_widgets["STT"].setValue)
             self.controller.translate_progress.connect(self.progress_widgets["Translate"].setValue)
             self.controller.tts_progress.connect(self.progress_widgets["Synthesis"].setValue)
             
-            # ПУНКТ 6: Обробка завершення етапів
             self.controller.step_completed.connect(self.on_pipeline_step_completed)
-            
             self.add_log("✅ Канали зв'язку з ШІ-модулем налаштовано")
 
-    # ПУНКТ 6: Відображення перекладеного відео після рендеру
+    def play_shared_sample(self, ref_wav, speaker_id):
+        """Метод єдиного плеєра для еталонів голосу"""
+        if ref_wav and os.path.exists(ref_wav):
+            if self.media_player.playbackState() == QMediaPlayer.PlayingState:
+                self.media_player.pause()
+                self.play_btn.setText("▶")
+            self.sample_player.setSource(QUrl.fromLocalFile(ref_wav))
+            self.sample_player.play()
+            self.add_log(f"🔊 Прослуховування еталону голосу для {speaker_id}")
+        else:
+            self.add_log(f"⚠️ Файл зразка для {speaker_id} не знайдено.")
+
+    def update_speaker_inspector(self):
+        self.speaker_list.clear()
+        if not self.controller or not self.controller.project: return
+        project = self.controller.project
+        
+        if not project.speaker_voice_map: return
+            
+        for speaker_id, ref_path in project.speaker_voice_map.items():
+            detected_gender = "Female"
+            for seg in project.segments:
+                if seg.speaker_id == speaker_id:
+                    detected_gender = seg.gender
+                    break
+            
+            item = QListWidgetItem(self.speaker_list)
+            row_widget = SpeakerRowWidget(speaker_id, detected_gender, ref_path, self)
+            item.setSizeHint(row_widget.sizeHint())
+            self.speaker_list.addItem(item)
+            self.speaker_list.setItemWidget(item, row_widget)
+            
+        self.add_log(f"👥 Інспектор спікерів оновлено. Профілів: {len(project.speaker_voice_map)}")
+
     @Slot(str, str)
     def on_pipeline_step_completed(self, step_type, media_path):
         if step_type == "ANALYSIS_DONE":
             self.add_log("🎉 Фаза аналізу завершена. Текст готовий до валідації.")
+            # 🔥 ФІКС: Оновлюємо інспектор відразу після аналізу мови!
+            self.update_speaker_inspector()
         elif step_type == "SYNTHESIS_DONE":
             self.add_log(f"📺 Автоперемикання плеєра на готове дубльоване відео: {media_path}")
             self.media_player.setSource(QUrl.fromLocalFile(media_path))
             self.media_player.play()
+            self.play_btn.setText("⏸")
             self.btn_confirm.setEnabled(True)
             self.btn_confirm.setText("✅ ПІДТВЕРДИТИ ТЕКСТ ТА ПОЧАТИ ДУБЛЯЖ")
 
-    # ПУНКТ 7: Логіка керування плеєром та перемотування
     def on_player_position_changed(self, position):
         if not self.time_slider.isSliderDown():
             self.time_slider.setValue(position)
@@ -292,10 +367,7 @@ class PolyGlotWindow(QMainWindow):
     def update_time_label(self, position, duration):
         pos_sec = position // 1000
         dur_sec = duration // 1000
-        self.lbl_time.setText(
-            f"{int(pos_sec // 60):02}:{int(pos_sec % 60):02} / "
-            f"{int(dur_sec // 60):02}:{int(dur_sec % 60):02}"
-        )
+        self.lbl_time.setText(f"{int(pos_sec // 60):02}:{int(pos_sec % 60):02} / {int(dur_sec // 60):02}:{int(dur_sec % 60):02}")
 
     @Slot(str)
     def add_log(self, message):
@@ -309,12 +381,10 @@ class PolyGlotWindow(QMainWindow):
         if not path: return
 
         self.add_log(f"📁 Файл обрано: {path}")
-        
         languages = ["English", "Ukrainian", "French", "German", "Spanish"]
         lang, ok = QInputDialog.getItem(self, "Settings", "Target Language:", languages, 0, False)
         
         if ok and lang:
-            # Мапінг вибору у ISO коди
             lang_map = {"English": "en", "Ukrainian": "uk", "French": "fr", "German": "de", "Spanish": "es"}
             target_iso = lang_map.get(lang, "en")
 
@@ -341,41 +411,31 @@ class PolyGlotWindow(QMainWindow):
     
     @Slot(list)
     def fill_transcript(self, segments):
-        """ПУНКТ 1 та 2: Наповнення редактора інтерактивними картками"""
         self.transcript_list.clear()
-        
         for seg in segments:
             item = QListWidgetItem(self.transcript_list)
-            
-            # Створюємо кастомний віджет для рядка
             card = SegmentCardWidget(seg, self.controller, self)
             item.setSizeHint(card.sizeHint())
-            
-            # Зв'язуємо елемент списку з віджетом
             self.transcript_list.addItem(item)
             self.transcript_list.setItemWidget(item, card)
         
         self.add_log(f"✅ Успішно завантажено {len(segments)} інтерактивних карток")
         self.btn_confirm.setEnabled(True)
         self.btn_confirm.setText("✅ ПІДТВЕРДИТИ ТЕКСТ ТА ПОЧАТИ ДУБЛЯЖ")
+        self.update_speaker_inspector()
 
     @Slot()
     def upload_video_action(self):
-        """Пункт 10: Логіка перевизначення шляху збереження фінального відео"""
         if not self.controller:
-            self.add_log("⚠️ Спочатку завантажте відео, щоб система створила проєкт!")
+            self.add_log("⚠️ Спочатку завантажте відео!")
             return
-    
         path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Оберіть місце для збереження готового відео", 
-            self.controller.project.project_name + "_localized.mp4",
-            "Відео файли (*.mp4)"
+            self, "Оберіть місце для збереження", 
+            self.controller.project.project_name + "_localized.mp4", "Відео файли (*.mp4)"
         )
-        
         if path:
             self.controller.project.output_video_path = path
-            self.add_log(f"💾 Новий шлях для фінального експорту задано: {path}")
+            self.add_log(f"💾 Новий шлях експорту: {path}")
 
     def toggle_playback(self):
         if self.media_player.playbackState() == QMediaPlayer.PlayingState:
@@ -400,21 +460,6 @@ class PolyGlotWindow(QMainWindow):
             #WarningBadge { background: rgba(139, 124, 255, 0.1); color: #8B7CFF; border: 1px solid rgba(139, 124, 255, 0.3); border-radius: 12px; padding: 4px 12px; }
             QProgressBar { background: #1A1A1A; border-radius: 4px; height: 6px; text-align: center; color: transparent; }
             QProgressBar::chunk { background: #8B7CFF; }
-            QSplitter::handle { background: transparent; }
-            #UploadButton {
-                background: #2A2A2A; color: #FFFFFF; border: 1px solid #444; border-radius: 8px;
-                padding: 6px 14px; font-weight: 600; margin-left: 10px;
-            }
-            #UploadButton:hover { background: #353535; border-color: #8B7CFF; }
             QSlider::groove:horizontal { height: 4px; background: #222; border-radius: 2px; }
             QSlider::handle:horizontal { background: #8B7CFF; width: 12px; margin-top: -4px; margin-bottom: -4px; border-radius: 6px; }
         """)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
-    window = PolyGlotWindow()
-    window.show()
-    with loop:
-        loop.run_forever()

@@ -5,88 +5,96 @@ import torchaudio
 from ml.speech_to_text import get_whisper_model, get_diarization_pipeline
 from core.project import TimelineSegment
 
+
 class STTService:
     def __init__(self):
         self.whisper_model = None
         self.diarization_pipeline = None
 
     def load_models(self):
-        """Завантажує моделі у VRAM лише за потреби (Lazy Loading)"""
+        """Lazy load з мінімальним VRAM usage"""
         if not self.whisper_model:
             self.whisper_model = get_whisper_model()
+
         if not self.diarization_pipeline:
             self.diarization_pipeline = get_diarization_pipeline()
 
+            # КЛЮЧОВА ОПТИМІЗАЦІЯ: діаризацію тримаємо на CPU
+            try:
+                self.diarization_pipeline.to(torch.device("cpu"))
+                print("[STT] Diarization moved to CPU to save VRAM")
+            except Exception:
+                pass
+
     async def process(self, audio_path, source_lang="uk", progress_callback=None):
-        """
-        Виконує повний цикл аналізу голосу.
-        Повертає список готових об'єктів TimelineSegment та словник референсів спікерів.
-        """
         self.load_models()
 
-        # 1. Діаризація (Pyannote) - робимо першою, щоб знати таймінги спікерів
+        if progress_callback:
+            progress_callback(5)  # Емулюємо старт
+
+        # ---------------------------
+        # 1. LOAD AUDIO 
+        # ---------------------------
         waveform, sample_rate = torchaudio.load(audio_path)
-        diarization = self.diarization_pipeline({"waveform": waveform, "sample_rate": sample_rate})
 
-        # 2. Транскрипція (Whisper) з відстеженням прогресу для Пункту 8
-        def whisper_progress_hook(progress_info):
-            if progress_callback:
-                # progress_info - це об'єкт з атрибутами або словник, залежно від версії faster-whisper
-                # Зазвичай це іменований кортеж (duration, processed_duration, ...)
-                try:
-                    percent = int((progress_info.completed_segments_duration / progress_info.total_duration) * 100)
-                    progress_callback(percent)
-                except AttributeError:
-                    pass
+        # ---------------------------
+        # 2. DIARIZATION (CPU)
+        # ---------------------------
+        if progress_callback:
+            progress_callback(15)
+            
+        with torch.no_grad():
+            diarization = self.diarization_pipeline(
+                {"waveform": waveform, "sample_rate": sample_rate}
+            )
 
+        if progress_callback:
+            progress_callback(35)
+
+        # ---------------------------
+        # 3. WHISPER TRANSCRIPTION (МАКСИМАЛЬНА ТОЧНІСТЬ)
+        # ---------------------------
         segments, info = self.whisper_model.transcribe(
-            audio_path, 
-            language=source_lang if source_lang != "auto" else None, 
-            beam_size=5,
-            vad_filter=True
-            # Додаємо хук прогресу, якщо твоя версія faster-whisper його підтримує через лінійний генератор
+            audio_path,
+            language=source_lang if source_lang != "auto" else None,
+            
+            # Параметри для покращення якості:
+            beam_size=2,            
+            best_of=3,              # Генерує кілька кандидатів і обирає топ
+            vad_filter=True,        # Вирізає фоновий шум і тишу, щоб Whisper не галюцинував
+            
+            # Налаштування проти зациклення звуку 
+            temperature=0.0,        # 0.0 робить генерацію тексту суворою та стабільною
+            compression_ratio_threshold=2.4, 
+            no_speech_threshold=0.6
         )
-        
-        # Перетворюємо генератор в список. Якщо хук не підтримується всередині моделі, 
-        # прогрес можна рахувати ітеративно по сегментах:
+
         segments_list = []
         for seg in segments:
             segments_list.append(seg)
             if progress_callback and info.duration > 0:
-                percent = int((seg.end / info.duration) * 100)
-                progress_callback(min(percent, 100)) # Шлемо сигнал у прогрес-бар STT
+                # Розподіляємо шкалу від 35% до 90% для Whisper
+                percent = 35 + int((seg.end / info.duration) * 55)
+                progress_callback(min(percent, 90))
 
-        # 3. Мапінг та створення TimelineSegment
+        # ---------------------------
+        # 4. MATCH SPEAKERS & EXTRACT VOICE SAMPLES
+        # ---------------------------
         timeline_segments = []
-        speaker_samples = {} # Словник для збереження шматочків голосу {speaker_id: path_to_wav}
-        
-        # Створюємо папку для голосових референсів клонування (Пункт 3)
-        cache_dir = os.path.join("projects", "speaker_samples")
+        speaker_samples = {}
+
+        cache_dir = os.path.abspath(os.path.join("projects", "speaker_samples"))
         os.makedirs(cache_dir, exist_ok=True)
-        
+
         for i, seg in enumerate(segments_list):
             best_speaker = "Unknown"
             max_overlap = 0
-            best_turn = None
-            
+
             for turn, _, speaker in diarization.itertracks(yield_label=True):
                 overlap = min(seg.end, turn.end) - max(seg.start, turn.start)
                 if overlap > max_overlap:
                     max_overlap = overlap
                     best_speaker = speaker
-                    best_turn = turn
-
-            # Пункт 3: Якщо ми знайшли чіткий інтервал спікера і у нас ще немає референсу його голосу
-            if best_speaker != "Unknown" and best_speaker not in speaker_samples and max_overlap > 1.5:
-                # Вирізаємо чистий шматочок аудіо (від 1.5 до 4 секунд ідеально для клонування)
-                start_frame = int(best_turn.start * sample_rate)
-                end_frame = int(min(best_turn.end, best_turn.start + 4.0) * sample_rate)
-                
-                speaker_wave = waveform[:, start_frame:end_frame]
-                sample_path = os.path.join(cache_dir, f"{best_speaker}_ref.wav")
-                
-                torchaudio.save(sample_path, speaker_wave, sample_rate)
-                speaker_samples[best_speaker] = sample_path
 
             new_seg = TimelineSegment(
                 id=i,
@@ -98,8 +106,39 @@ class STTService:
             )
             timeline_segments.append(new_seg)
 
+            # ФІКС БАГУ: Вирізаємо зразок голосу для XTTS, якщо його ще немає
+            if best_speaker != "Unknown" and best_speaker not in speaker_samples:
+                # Обчислюємо межі зразка в контексті аудіо-масиву (в семплах)
+                start_sample = int(seg.start * sample_rate)
+                end_sample = int(seg.end * sample_rate)
+                
+                # Вирізаємо аудіо-шматок (чиста нарізка тензора)
+                speaker_wav_tensor = waveform[:, start_sample:end_sample]
+                
+                # Тільки якщо репліка довша за 1.5 секунди (щоб еталон голосу був якісним)
+                if (seg.end - seg.start) > 1.5:
+                    sample_file_key = best_speaker.lower().replace(" ", "_")
+                    sample_path = os.path.join(cache_dir, f"{sample_file_key}.wav")
+                    
+                    # Зберігаємо нарізаний шматочок на диск
+                    torchaudio.save(sample_path, speaker_wav_tensor, sample_rate)
+                    speaker_samples[best_speaker] = sample_path
+
+        # Якщо для якогось спікера всі репліки були надто короткими, робимо фолбек на першу ліпшу
+        for seg in timeline_segments:
+            if seg.speaker_id != "Unknown" and seg.speaker_id not in speaker_samples:
+                speaker_samples[seg.speaker_id] = audio_path  # Фолбек на повний вокал
+
+        # ---------------------------
+        # 5. CLEAN VRAM HARD
+        # ---------------------------
+        del waveform
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
-        # Повертаємо і сегменти, і карту вирізаних зразків голосу
+        if progress_callback:
+            progress_callback(100)
+
+        print(f"[STT] Успішно виділено спікерів: {list(speaker_samples.keys())}")
         return timeline_segments, speaker_samples
