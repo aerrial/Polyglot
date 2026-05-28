@@ -2,6 +2,10 @@
 import os
 import torch
 
+# Папки кешу для очищення
+CACHE_AUDIO_DIR = os.path.join("projects", "cache_audio")
+CACHE_DEMUCS_DIR = os.path.join("projects", "cache_demucs")
+
 # Режим перекладу: True — інтелектуальний Gemini LLM, False — класичний GoogleTranslator
 TRANSLATION_MODE_LLM = True  
 
@@ -11,9 +15,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Тепер BASE_DIR — це суворий корінь проєкту
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# ==========================================
-# ⚡ РАДИКАЛЬНА ОПТИМІЗАЦІЯ VRAM ДЛЯ RTX 3050
-# ==========================================
+# оптимізація використання VRAM для стабільності та продуктивності
 VRAM_SAFE_MODE = True
 SERIAL_GPU_PIPELINE = True
 CLEAR_CUDA_CACHE = True
@@ -32,6 +34,8 @@ VIDEO_FILE = os.path.join(BASE_DIR, "data", "input_video.mp4")
 OUTPUT_FILE = os.path.join(BASE_DIR, "output", "translated_video.mp4")
 TEMP_DIR = os.path.join(BASE_DIR, "output", "temp_segments")
 DEMUCS_OUTPUT = os.path.join(BASE_DIR, "output", "demucs_output")
+
+TARGET_LANGUAGE = "en"
 
 SUPPORTED_LANGUAGES = {
     "Українська": "uk",

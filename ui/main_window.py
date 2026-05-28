@@ -112,30 +112,82 @@ class SegmentCardWidget(QWidget):
             self.segment.status = "modified" 
 
     def on_original_changed(self):
+        """Реалізація безпечного QT-Debounce для живого перекладу"""
         new_orig = self.edit_orig.toPlainText()
         if self.segment.original_text != new_orig:
             self.segment.original_text = new_orig
             self.segment.status = "modified"
             
-            # Реалізація Debounce: скидаємо таску, якщо користувач продовжує друкувати
-            if self.translation_timer:
-                self.translation_timer.cancel()
-            self.translation_timer = asyncio.get_event_loop().call_later(
-                0.8, lambda: asyncio.create_task(self.trigger_single_translation(new_orig))
-            )
+            print(f"[DEBUG UI] Користувач друкує в сегменті {self.segment.id}. Запуск таймера...")
+            
+            from PySide6.QtCore import QTimer
+            import asyncio
+            
+            if hasattr(self, 'qt_debounce_timer'):
+                self.qt_debounce_timer.stop()
+            else:
+                self.qt_debounce_timer = QTimer()
+                self.qt_debounce_timer.setSingleShot(True)
+                
+            try:
+                self.qt_debounce_timer.timeout.disconnect()
+            except Exception:
+                pass
+                
+            def timeout_slot():
+                print(f"[DEBUG UI] 800 мс пройшло! Інтегруємо асинхронну таску в діючий QEventLoop для: '{new_orig[:20]}'")
+                # 🔥 ФІКС: Отримуємо поточний цикл qasync та безпечно реєструємо в ньому коротину
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.trigger_single_translation(new_orig))
+                else:
+                    print("[DEBUG UI] Помилка: асинхронний Loop не запущений!")
+                
+            self.qt_debounce_timer.timeout.connect(timeout_slot)
+            self.qt_debounce_timer.start(800)
 
     async def trigger_single_translation(self, text):
-        if not text.strip(): return
+        if not text.strip(): 
+            return
+        print(f"[DEBUG UI] Метод trigger_single_translation СТАРТУВАВ для сегмента {self.segment.id}")
         try:
             self.edit_trans.textChanged.disconnect(self.on_translation_changed)
-            translated = await self.controller.translate_service.translate_text(
-                text, self.controller.project.target_lang
+            
+            max_dur = float(self.segment.end - self.segment.start)
+            from core import settings
+            
+            # 🚨 ПЕРЕВІРКА НАЯВНОСТІ СЕРВІСУ:
+            # Якщо в контролері немає translate_service, ми створимо його локально прямо тут, щоб не падати!
+            if not hasattr(self.controller, 'translate_service') or self.controller.translate_service is None:
+                print("[DEBUG UI] У контролері відсутній translate_service! Створюємо екземпляр на льоту...")
+                from services.translate_service import TranslateService
+                self.controller.translate_service = TranslateService()
+                
+            print(f"[DEBUG UI] Відправка запиту в TranslateService. Мова: {settings.TARGET_LANGUAGE}")
+            
+            # Викликаємо наш новий метод
+            translated = await self.controller.translate_service.translate_single_text(
+                text, max_dur, settings.TARGET_LANGUAGE
             )
+            
+            print(f"[DEBUG UI] Отримано відповідь перекладу: '{translated}'")
+            
             self.segment.translated_text = translated
             self.edit_trans.setPlainText(translated)
+            
             self.edit_trans.textChanged.connect(self.on_translation_changed)
+            
+            if self.parent_window:
+                self.parent_window.add_log(f"✍️ Живий автопереклад для сегмента {self.segment.id} оновлено.")
+                
         except Exception as e:
-            print(f"Помилка поштучного перекладу: {e}")
+            print(f"[DEBUG UI] КРИТИЧНА ПОМИЛКА у trigger_single_translation: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                self.edit_trans.textChanged.connect(self.on_translation_changed)
+            except Exception:
+                pass
 
 
 class PolyGlotWindow(QMainWindow):
@@ -342,43 +394,228 @@ class PolyGlotWindow(QMainWindow):
         self.add_log(f"👥 Інспектор спікерів оновлено. Профілів: {len(project.speaker_voice_map)}")
 
     def open_settings_dialog(self):
-        """Пункт 11: Вікно конфігурації ШІ-пайплайну (Режим перекладу + API Ключ)"""
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QCheckBox, QLineEdit, QFormLayout
+        """Пункт 1 та 3: Оновлений дизайнерський інтерфейс налаштувань програми"""
+        from PySide6.QtWidgets import (
+            QDialog, QDialogButtonBox, QCheckBox, QLineEdit, QFormLayout, 
+            QComboBox, QPushButton, QMessageBox, QGroupBox, QVBoxLayout, QHBoxLayout
+        )
+        import shutil
         from core import settings
         
         dialog = QDialog(self)
-        dialog.setWindowTitle("PolyGlot AI Settings")
-        dialog.setMinimumWidth(500)
-        dialog.setStyleSheet("background: #121212; color: #E0E0E0;")
+        dialog.setWindowTitle("PolyGlot AI Studio — Конфігурація системи")
+        dialog.setMinimumWidth(600)
         
-        layout = QFormLayout(dialog)
+        # 📌 Глобальний стиль для вікна налаштувань
+        dialog.setStyleSheet("""
+            QDialog { 
+                background-color: #0D0D0E; 
+            }
+            QLabel { 
+                color: #A1A1AA; 
+                font-size: 12px; 
+                font-weight: 500;
+            }
+            QGroupBox { 
+                background-color: #151516; 
+                border: 1px solid #27272A; 
+                border-radius: 8px; 
+                margin-top: 16px; 
+                padding-top: 12px;
+                font-weight: bold;
+                color: #FFFFFF;
+            }
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top left; 
+                padding: 0 8px; 
+                margin-left: 10px;
+                color: #8B7CFF;
+            }
+            QLineEdit, QComboBox { 
+                background-color: #202022; 
+                border: 1px solid #27272A; 
+                border-radius: 6px; 
+                padding: 6px 10px; 
+                color: #FFFFFF; 
+                font-size: 12px;
+            }
+            QLineEdit:focus, QComboBox:focus { 
+                border-color: #8B7CFF; 
+            }
+            QCheckBox { 
+                color: #E4E4E7; 
+                font-size: 12px; 
+                spacing: 8px;
+            }
+            QCheckBox::indicator { 
+                width: 16px; 
+                height: 16px; 
+                border: 1px solid #3F3F46; 
+                border-radius: 4px; 
+                background: #202022;
+            }
+            QCheckBox::indicator:checked { 
+                background-color: #8B7CFF; 
+                border-color: #8B7CFF;
+            }
+        """)
         
-        # 1. Чекбокс вибору режиму
-        cb_mode = QCheckBox("Увімкнути інтелектуальний Lipsync переклад (Gemini LLM)")
+        main_vertical_layout = QVBoxLayout(dialog)
+        main_vertical_layout.setContentsMargins(20, 10, 20, 20)
+        main_vertical_layout.setSpacing(10)
+        
+        # ----------------------------------------------------------------------
+        # 🧠 СЕКЦІЯ 1: Мовний рушій (Translation)
+        # ----------------------------------------------------------------------
+        group_translation = QGroupBox("Модуль перекладу та локалізації")
+        trans_layout = QFormLayout(group_translation)
+        trans_layout.setSpacing(12)
+        
+        cb_mode = QCheckBox("Увімкнути розумний Lipsync (Gemini 1.5 Flash LLM)")
         cb_mode.setChecked(settings.TRANSLATION_MODE_LLM)
-        cb_mode.setStyleSheet("QCheckBox { font-size: 13px; color: #8B7CFF; font-weight: bold; }")
-        layout.addRow(cb_mode)
+        cb_mode.setStyleSheet("font-weight: 600; color: #FFFFFF;")
+        trans_layout.addRow(cb_mode)
         
-        # 2. Поле введення API-ключа
         le_key = QLineEdit(settings.GEMINI_API_KEY)
-        le_key.setEchoMode(QLineEdit.Password) # Ховаємо токен крапками для безпеки на захисті
-        le_key.setPlaceholderText("Введіть ваш безкоштовний Gemini API Key...")
-        le_key.setStyleSheet("background: #222; border: 1px solid #333; padding: 6px; color: white;")
-        layout.addRow("Gemini API Key:", le_key)
+        le_key.setEchoMode(QLineEdit.Password)
+        le_key.setPlaceholderText("Введіть ваш секретний API Key...")
+        trans_layout.addRow("Ключ доступу Gemini API:", le_key)
         
-        # Кнопки Зберегти / Скасувати
+        combo_lang = QComboBox()
+        combo_lang.addItems(["uk", "en", "es", "de", "fr"])
+        combo_lang.setCurrentText(settings.TARGET_LANGUAGE)
+        trans_layout.addRow("Цільова мова за замовчуванням:", combo_lang)
+        
+        main_vertical_layout.addWidget(group_translation)
+        
+        # ----------------------------------------------------------------------
+        # 🎙️ СЕКЦІЯ 2: Розпізнавання мови (STT)
+        # ----------------------------------------------------------------------
+        group_stt = QGroupBox("Параметри розпізнавання (Whisper STT)")
+        stt_layout = QFormLayout(group_stt)
+        stt_layout.setSpacing(12)
+        
+        combo_whisper = QComboBox()
+        combo_whisper.addItems(["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"])
+        combo_whisper.setCurrentText(settings.WHISPER_MODEL_SIZE)
+        stt_layout.addRow("Нейронна модель розпізнавання:", combo_whisper)
+        
+        main_vertical_layout.addWidget(group_stt)
+        
+        # ----------------------------------------------------------------------
+        # 🗑️ СЕКЦІЯ 3: Системні утиліти (Maintenance) — З ПІДРАХУНКОМ РОЗМІРУ КЕШУ
+        # ----------------------------------------------------------------------
+        group_system = QGroupBox("Обслуговування системи")
+        system_layout = QHBoxLayout(group_system)
+        system_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 🧠 Функція для підрахунку реального розміру кешу на диску
+        def get_cache_size_mb():
+            total_size = 0
+            for folder in [settings.CACHE_AUDIO_DIR, settings.CACHE_DEMUCS_DIR]:
+                if os.path.exists(folder):
+                    for dirpath, _, filenames in os.walk(folder):
+                        for f in filenames:
+                            fp = os.path.join(dirpath, f)
+                            # Пропускаємо символічні посилання, рахуємо тільки фізичні файли
+                            if os.path.exists(fp) and not os.path.islink(fp):
+                                total_size += os.path.getsize(fp)
+            # Переводимо байти в мегабайти (1 МБ = 1024 * 1024 байт)
+            return total_size / (1024 * 1024)
+
+        current_cache_size = get_cache_size_mb()
+        
+        # Виводимо інформацію користувачу (округлюємо до 1 знака після коми)
+        lbl_cache_info = QLabel(f"Тимчасові ШІ-файли (Аудіо, Вокал, Фон).<br>Зайнято на диску: <b style='color: #8B7CFF;'>{current_cache_size:.1f} МБ</b>")
+        lbl_cache_info.setStyleSheet("color: #A1A1AA; line-height: 15px;")
+        
+        btn_clear_cache = QPushButton("🗑️ Очистити кеш")
+        btn_clear_cache.setFixedWidth(140)
+        btn_clear_cache.setStyleSheet("""
+            QPushButton { 
+                background-color: #27272A; 
+                border: 1px solid #3F3F46; 
+                color: #F4F4F5; 
+                font-weight: 600; 
+                padding: 6px; 
+                border-radius: 6px; 
+            }
+            QPushButton:hover { 
+                background-color: #7f1d1d; 
+                border-color: #ef4444; 
+                color: #FFFFFF; 
+            }
+        """)
+        
+        def clear_cache_action():
+            deleted_counts = 0
+            for folder in [settings.CACHE_AUDIO_DIR, settings.CACHE_DEMUCS_DIR]:
+                if os.path.exists(folder):
+                    for filename in os.listdir(folder):
+                        file_path = os.path.join(folder, filename)
+                        try:
+                            if os.path.isfile(file_path) or os.path.islink(file_path):
+                                os.unlink(file_path)
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                            deleted_counts += 1
+                        except Exception:
+                            pass
+            
+            QMessageBox.information(dialog, "Успіх", f"Кеш повністю очищено. Видалено {deleted_counts} об'єктів.")
+            self.add_log("🧹 Користувач повністю очистив тимчасовий кеш проєкту.")
+            
+            # 🔥 Динамічно оновлюємо текст на лейблі відразу після видалення файлів!
+            lbl_cache_info.setText("Тимчасові ШІ-файли (Аудіо, Вокал, Фон).<br>Зайнято на диску: <b style='color: #8B7CFF;'>0.0 МБ</b>")
+            
+        btn_clear_cache.clicked.connect(clear_cache_action)
+        system_layout.addWidget(lbl_cache_info)
+        system_layout.addStretch()
+        system_layout.addWidget(btn_clear_cache)
+        
+        main_vertical_layout.addWidget(group_system)
+        main_vertical_layout.addSpacing(10)
+        
+        # ----------------------------------------------------------------------
+        # 🎛️ Фінальні кнопки збереження (Dialog Buttons)
+        # ----------------------------------------------------------------------
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.setStyleSheet("""
+            QPushButton { 
+                background-color: #202022; 
+                border: 1px solid #27272A; 
+                color: #FFFFFF; 
+                padding: 6px 20px; 
+                border-radius: 6px; 
+                font-weight: 500;
+                min-width: 80px;
+            }
+            QPushButton:hover { 
+                background-color: #27272A; 
+            }
+            QPushButton[text="OK"] { 
+                background-color: #8B7CFF; 
+                color: #000000; 
+                font-weight: 600; 
+                border: none;
+            }
+            QPushButton[text="OK"]:hover { 
+                background-color: #A396FF; 
+            }
+        """)
+        
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
-        layout.addRow(buttons)
+        main_vertical_layout.addWidget(buttons)
         
         if dialog.exec() == QDialog.Accepted:
-            # Зберігаємо налаштування у глобальний конфіг
             settings.TRANSLATION_MODE_LLM = cb_mode.isChecked()
             settings.GEMINI_API_KEY = le_key.text().strip()
+            settings.TARGET_LANGUAGE = combo_lang.currentText()
+            settings.WHISPER_MODEL_SIZE = combo_whisper.currentText()
             
-            mode_status = "Gemini LLM" if settings.TRANSLATION_MODE_LLM else "GoogleTranslator"
-            self.add_log(f"⚙️ Налаштування оновлено! Режим перекладу: {mode_status}")
+            self.add_log(f"⚙️ Налаштування збережено! Мова: {settings.TARGET_LANGUAGE} | Whisper: {settings.WHISPER_MODEL_SIZE}")
 
     @Slot(str, str)
     def on_pipeline_step_completed(self, step_type, media_path):
@@ -429,12 +666,16 @@ class PolyGlotWindow(QMainWindow):
             lang_map = {"English": "en", "Ukrainian": "uk", "French": "fr", "German": "de", "Spanish": "es"}
             target_iso = lang_map.get(lang, "en")
 
+            # 🔥 ФІКС: Записуємо мову всюди, щоб сервіси її бачили
+            from core import settings
+            settings.TARGET_LANGUAGE = target_iso 
+
             self.media_player.setSource(QUrl.fromLocalFile(path))
             self.add_log("🎬 Оригінальне відео завантажено в плеєр")
             self.btn_confirm.setText("⏳ ОБРОБКА ШІ...")
-            
+
             self.controller = LocalizationController(path)
-            self.controller.project.target_lang = target_iso
+            self.controller.project.target_lang = target_iso # Для збереження в JSON
             self.connect_signals()
             await self.controller.run_full_analysis()
 

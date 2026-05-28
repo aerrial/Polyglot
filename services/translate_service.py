@@ -125,3 +125,14 @@ class TranslateService:
                 new_id_counter += 1
 
         print(f"[Translate] Оптимізацію таймлайну завершено. Кількість карт на виході: {len(segments)}")
+
+    async def translate_single_text(self, text: str, max_duration: float, target_lang: str) -> str:
+        """Спеціальний метод для миттєвого перекладу однієї фрази при ручному редагуванні"""
+        if not text.strip():
+            return ""
+        
+        # Динамічно дивимося на прапорець із глобальних налаштувань
+        if settings.TRANSLATION_MODE_LLM:
+            return await self._translate_with_gemini(text, max_duration, target_lang)
+        else:
+            return await self._translate_with_google(text, target_lang)
