@@ -3,6 +3,7 @@ import os
 import httpx
 import edge_tts
 import asyncio
+import subprocess
 from typing import List, Dict, Optional
 from core.project import TimelineSegment
 from core.settings import VOICE_PROFILES
@@ -15,6 +16,54 @@ class TTSService:
 
         # 🔥 простий in-memory кеш (зменшує повторні XTTS виклики)
         self.xtts_cache = {}
+
+    def _speed_up_audio_if_needed(self, file_path: str, max_duration: float):
+        """
+        [AUDIO ALIGNMENT] Нативно прискорює аудіофайл через FFmpeg-фільтр 'atempo',
+        якщо він перевищує відведений ліміт часу картки на екрані.
+        """
+        if max_duration <= 0 or not file_path or not os.path.exists(file_path):
+            return
+
+        try:
+            # 1. Дізнаємося реальну тривалість створеного ШІ-файлу через ffprobe
+            cmd_probe = [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nocut=1", file_path
+            ]
+            result = subprocess.run(cmd_probe, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=True)
+            actual_duration = float(result.stdout.strip().split('=')[1])
+        except Exception:
+            return  # Якщо не вдалося зчитати довжину, пропускаємо, щоб не ламати конвеєр
+
+        # 2. Порівнюємо: якщо ШІ-голос довший за вікно картки субтитрів
+        if actual_duration > max_duration:
+            # Обчислюємо точний коефіцієнт потрібного прискорення
+            factor = actual_duration / max_duration
+            
+            # Обмеження коефіцієнта (макс. 1.45), щоб мовлення залишалося розбірливим і природним для людини
+            factor = min(factor, 1.45) 
+            
+            print(f"[TTS Alignment] Сегмент виходить за межі на {actual_duration - max_duration:.2f} сек. "
+                  f"Запуск нативного прискорення atempo={factor:.2f}x...")
+            
+            temp_output = file_path + "_speedup.wav"
+            
+            cmd_ffmpeg = [
+                "ffmpeg", "-y",
+                "-i", file_path,
+                "-filter:a", f"atempo={factor:.2f}",
+                "-c:a", "pcm_s16le",  # зберігаємо нестиснений стабільний wav
+                temp_output
+            ]
+            
+            try:
+                subprocess.run(cmd_ffmpeg, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                # Замінюємо початковий файл його прискореною версією
+                if os.path.exists(temp_output):
+                    os.replace(temp_output, file_path)
+            except Exception as e:
+                print(f"[TTS Alignment Error] Не вдалося виконати atempo для {file_path}: {e}")
 
     async def process_all(
         self,
@@ -54,8 +103,6 @@ class TTSService:
                 # -------------------------
                 # 1. SKIP RULES (Клонуємо лише якщо є валідний референс-файл)
                 # -------------------------
-                # Прибираємо обмеження "len(text) > 20" під час захисту диплому, 
-                # щоб навіть короткі репліки типу "Yes", "Hello" читалися клонованим XTTS голосом!
                 use_xtts = (
                     ref_path is not None and
                     os.path.exists(ref_path)
@@ -102,6 +149,30 @@ class TTSService:
                     print(f"[TTS] Для сегмента {seg.id} немає зразка голосу. Запуск Edge-TTS.")
                     await self._edge_fallback(seg, target_lang, seg_output_path)
 
+                # ----------------------------------------------------------------------
+                # 🔥 РОЗУМНИЙ АЛАЙНМЕНТ: Захист від накладання на наступну репліку (Overlap Resolver)
+                # ----------------------------------------------------------------------
+                if seg.audio_path and os.path.exists(seg.audio_path):
+                    # За замовчуванням максимальний час — це чиста тривалість картки
+                    max_allowed_time = float(seg.end - seg.start)
+                    
+                    # ПЕРЕВІРКА НАПЕРЕД: Якщо це не останній сегмент, дивимося на старт наступного
+                    if i < total - 1:
+                        next_seg = segments[i + 1]
+                        
+                        # Обчислюємо максимальний ліміт: від нашого старту до старту наступної репліки!
+                        # Це залізобетонно не дасть поточному голосу налізти на наступний.
+                        absolute_limit = float(next_seg.start - seg.start)
+                        
+                        # Якщо між репліками є пауза, absolute_limit буде більшим за тривалість картки.
+                        # Нам вигідно взяти саме absolute_limit, щоб дати XTTS більше простору для природного темпу!
+                        if absolute_limit > 0:
+                            max_allowed_time = absolute_limit
+
+                    # Викликаємо автоматичний тайм-стретч, який тепер знає про сусідів
+                    self._speed_up_audio_if_needed(seg.audio_path, max_allowed_time)
+                # ----------------------------------------------------------------------
+
                 results.append(seg.audio_path or "")
 
                 if progress_callback:
@@ -113,13 +184,11 @@ class TTSService:
         """
         Резервний синтез мовлення через Edge-TTS (Захищений від voice must be str)
         """
-        # Отримуємо пул голосів для мови
         lang_pool = self.voice_profiles.get(
             target_lang,
             self.voice_profiles.get("en", {})
         )
 
-        # ФІКС: Перевіряємо, чи lang_pool є словником, чи прямим списком голосів
         if isinstance(lang_pool, dict):
             voice_list = lang_pool.get(seg.gender, [])
             voice = voice_list[0] if voice_list else None
@@ -128,7 +197,6 @@ class TTSService:
         else:
             voice = None
 
-        # Залізобетонний фолбек на випадок, якщо конфіг порожній (вирішує помилку voice must be str)
         if not voice or not isinstance(voice, str):
             voice = "uk-UA-OstapNeural" if target_lang == "uk" else "en-US-AriaNeural"
 

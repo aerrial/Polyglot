@@ -188,6 +188,8 @@ class PolyGlotWindow(QMainWindow):
         for item in ["Workspace", "Projects", "Voices", "Settings"]:
             btn = QPushButton(item)
             btn.setObjectName("NavButton")
+            if item == "Settings":
+                btn.clicked.connect(self.open_settings_dialog) # <--- ПРИВ'ЯЗКА СЛОТУ
             top_layout.addWidget(btn)
 
         top_layout.addStretch()
@@ -338,6 +340,45 @@ class PolyGlotWindow(QMainWindow):
             self.speaker_list.setItemWidget(item, row_widget)
             
         self.add_log(f"👥 Інспектор спікерів оновлено. Профілів: {len(project.speaker_voice_map)}")
+
+    def open_settings_dialog(self):
+        """Пункт 11: Вікно конфігурації ШІ-пайплайну (Режим перекладу + API Ключ)"""
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QCheckBox, QLineEdit, QFormLayout
+        from core import settings
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("PolyGlot AI Settings")
+        dialog.setMinimumWidth(500)
+        dialog.setStyleSheet("background: #121212; color: #E0E0E0;")
+        
+        layout = QFormLayout(dialog)
+        
+        # 1. Чекбокс вибору режиму
+        cb_mode = QCheckBox("Увімкнути інтелектуальний Lipsync переклад (Gemini LLM)")
+        cb_mode.setChecked(settings.TRANSLATION_MODE_LLM)
+        cb_mode.setStyleSheet("QCheckBox { font-size: 13px; color: #8B7CFF; font-weight: bold; }")
+        layout.addRow(cb_mode)
+        
+        # 2. Поле введення API-ключа
+        le_key = QLineEdit(settings.GEMINI_API_KEY)
+        le_key.setEchoMode(QLineEdit.Password) # Ховаємо токен крапками для безпеки на захисті
+        le_key.setPlaceholderText("Введіть ваш безкоштовний Gemini API Key...")
+        le_key.setStyleSheet("background: #222; border: 1px solid #333; padding: 6px; color: white;")
+        layout.addRow("Gemini API Key:", le_key)
+        
+        # Кнопки Зберегти / Скасувати
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+        
+        if dialog.exec() == QDialog.Accepted:
+            # Зберігаємо налаштування у глобальний конфіг
+            settings.TRANSLATION_MODE_LLM = cb_mode.isChecked()
+            settings.GEMINI_API_KEY = le_key.text().strip()
+            
+            mode_status = "Gemini LLM" if settings.TRANSLATION_MODE_LLM else "GoogleTranslator"
+            self.add_log(f"⚙️ Налаштування оновлено! Режим перекладу: {mode_status}")
 
     @Slot(str, str)
     def on_pipeline_step_completed(self, step_type, media_path):

@@ -2,6 +2,12 @@
 import os
 import torch
 
+# Режим перекладу: True — інтелектуальний Gemini LLM, False — класичний GoogleTranslator
+TRANSLATION_MODE_LLM = True  
+
+# Ключ доступу до Gemini API (можна підтягувати зі змінних оточення)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
 # Тепер BASE_DIR — це суворий корінь проєкту
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

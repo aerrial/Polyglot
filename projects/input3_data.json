@@ -21,7 +21,7 @@
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_0.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
@@ -33,7 +33,7 @@
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_1.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
@@ -45,7 +45,7 @@
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_2.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
@@ -57,31 +57,31 @@
             "speaker_id": "SPEAKER_02",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_3.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
             "id": 4,
             "start": 34.44,
-            "end": 40.66,
+            "end": 40.68,
             "original_text": "По-друге, аборти, якщо їх заборонити, будуть перезводити до багатьох небажаних наслідків, як то від.",
             "translated_text": "Secondly, abortions, if they are banned, will lead to many undesirable consequences, such as",
             "speaker_id": "SPEAKER_02",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_4.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
             "id": 5,
-            "start": 40.86,
+            "start": 40.88,
             "end": 47.92,
             "original_text": "Того, що жінки все одно будуть робити аборти, але нелегально, більш небезпечно до того, що будуть більше дітей, які нікому не потрібні.",
             "translated_text": "The fact that women will still have abortions, but illegally, is more dangerous than the fact that there will be more children that no one wants.",
             "speaker_id": "SPEAKER_02",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_5.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
@@ -93,7 +93,7 @@
             "speaker_id": "SPEAKER_01",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_6.wav",
+            "audio_path": null,
             "status": "rendered"
         },
         {
@@ -105,7 +105,7 @@
             "speaker_id": "SPEAKER_01",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": "projects\\cache_audio\\seg_7.wav",
+            "audio_path": null,
             "status": "rendered"
         }
     ]
