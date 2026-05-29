@@ -1,368 +1,25 @@
-# main_window.py
-import json
+# ui/main_window.py
 import sys
 import os
-import asyncio
 import datetime
+import shutil
 from qasync import QEventLoop, asyncSlot
 from PySide6.QtCore import Qt, QUrl, Slot
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QMainWindow, QPushButton, QProgressBar, QSlider, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, 
-    QWidget, QFileDialog, QInputDialog, QTextEdit, QLineEdit
+    QApplication, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QStackedWidget,
+    QMainWindow, QPushButton, QProgressBar, QSlider, QSplitter, QVBoxLayout, 
+    QWidget, QFileDialog, QInputDialog, QTextEdit, QFrame, QDialog, QDialogButtonBox,
+    QCheckBox, QLineEdit, QFormLayout, QComboBox, QMessageBox
 )
 from controllers.localization_controller import LocalizationController
-from core.project import TimelineSegment
 
-class Panel(QFrame):
-    def __init__(self, title=""):
-        super().__init__()
-        self.setObjectName("Panel")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        self.title = QLabel(title)
-        if title:
-            self.title.setObjectName("PanelTitle")
-            layout.addWidget(self.title)
-            
-        self.body = QVBoxLayout()
-        layout.addLayout(self.body)
-
-class SpeakerRowWidget(QWidget):
-    """ПУНКТ 4: Оновлена простора картка спікера з новим преміальним дизайном"""
-    def __init__(self, speaker_id: str, gender: str, ref_wav: str, parent_window):
-        super().__init__()
-        self.speaker_id = speaker_id
-        self.gender = gender
-        self.ref_wav = ref_wav
-        self.parent_window = parent_window
-        self.init_ui()
-
-    def init_ui(self):
-        # Робимо великі вертикальні відступи всередині картки спікера
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
-        
-        # Залишаємо універсальну іконку людини замість жорсткого розділення текстів статі
-        icon = "👤" if "Unknown" in self.speaker_id else "🎙️"
-        lbl_icon = QLabel(icon)
-        lbl_icon.setStyleSheet("font-size: 16px; color: #8B7CFF; background: transparent;")
-        
-        # Блок інформації
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
-        
-        # Назва спікера без зайвих позначок статі (Female/Male) у дужках
-        lbl_name = QLabel(self.speaker_id)
-        lbl_name.setStyleSheet("font-weight: 700; color: #FFFFFF; font-size: 13px; background: transparent;")
-        
-        # Короткий підпис статусу
-        lbl_status = QLabel("Голосовий профіль XTTS")
-        lbl_status.setStyleSheet("color: #71717A; font-size: 10px; font-weight: 500; background: transparent;")
-        
-        info_layout.addWidget(lbl_name)
-        info_layout.addWidget(lbl_status)
-        
-        # Стильна кнопка прослуховування зразка
-        self.btn_play_ref = QPushButton("▶ Зразок")
-        self.btn_play_ref.setFixedWidth(80)
-        self.btn_play_ref.setFixedHeight(26)
-        self.btn_play_ref.setStyleSheet("""
-            QPushButton { 
-                background: #202022; 
-                border: 1px solid #27272A; 
-                border-radius: 5px; 
-                color: #E4E4E7; 
-                font-size: 11px; 
-                font-weight: 600;
-            }
-            QPushButton:hover { 
-                background: #27272A; 
-                border-color: #8B7CFF; 
-                color: #FFFFFF; 
-            }
-            QPushButton:pressed {
-                background: rgba(139, 124, 255, 0.1);
-            }
-        """)
-        self.btn_play_ref.clicked.connect(self.play_speaker_sample)
-        
-        layout.addWidget(lbl_icon)
-        layout.addLayout(info_layout)
-        layout.addStretch()
-        layout.addWidget(self.btn_play_ref)
-
-    def play_speaker_sample(self):
-        self.parent_window.play_shared_sample(self.ref_wav, self.speaker_id)
-
-from PySide6.QtWidgets import QScrollArea, QFrame
-
-class ProjectCard(QFrame):
-    """Кастомний клікабельний блок для окремого проєкту"""
-    def __init__(self, project_name, target_lang, segments_count, video_path, full_json_path, parent_tab):
-        super().__init__()
-        self.json_path = full_json_path
-        self.parent_tab = parent_tab
-        self.init_ui(project_name, target_lang, segments_count, video_path)
-
-    def init_ui(self, name, lang, count, path):
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setObjectName("ProjectCard")
-        
-        # Стилізація картки (Dark, закруглені кути, фіолетовий акцент при hover)
-        self.setStyleSheet("""
-            QFrame#ProjectCard {
-                background-color: #151516;
-                border: 1px solid #27272A;
-                border-radius: 8px;
-                padding: 12px;
-            }
-            QFrame#ProjectCard:hover {
-                border-color: #8B7CFF;
-                background-color: #1C1C1E;
-            }
-            QLabel { background: transparent; }
-        """)
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(6)
-        
-        # Рядок 1: Назва та мова
-        h_layout = QHBoxLayout()
-        lbl_name = QLabel(f"📁 {name}")
-        lbl_name.setStyleSheet("font-size: 14px; font-weight: bold; color: #FFFFFF;")
-        
-        lbl_lang = QLabel(f" {lang.upper()} ")
-        lbl_lang.setStyleSheet("background-color: #27272A; color: #8B7CFF; font-weight: bold; border-radius: 4px; padding: 2px 6px; font-size: 11px;")
-        
-        h_layout.addWidget(lbl_name)
-        h_layout.addStretch()
-        h_layout.addWidget(lbl_lang)
-        layout.addLayout(h_layout)
-        
-        # Рядок 2: Кількість чанків
-        lbl_count = QLabel(f"📊 Стан: {count} розпізнаних сегментів")
-        lbl_count.setStyleSheet("color: #A1A1AA; font-size: 12px;")
-        layout.addWidget(lbl_count)
-        
-        # Рядок 3: Шлях до відео (зрізаний для компактності)
-        short_path = path if len(path) < 45 else "..." + path[-42:]
-        lbl_path = QLabel(f"🎬 {short_path}")
-        lbl_path.setStyleSheet("color: #71717A; font-size: 11px; font-family: 'Consolas';")
-        layout.addWidget(lbl_path)
-
-    def mousePressEvent(self, event):
-        """Обробка кліку по картці — завантажуємо проєкт"""
-        if event.button() == Qt.LeftButton:
-            self.parent_tab.parent_window.load_existing_project(self.json_path)
-
-
-class ProjectsTabWidget(QWidget):
-    """Оновлений компонент: Менеджер проєктів у вигляді вертикального списку карток"""
-    def __init__(self, parent_window):
-        super().__init__()
-        self.parent_window = parent_window
-        self.init_ui()
-
-    def init_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)
-        
-        # Заголовок всередині бічної панелі
-        header_layout = QHBoxLayout()
-        title = QLabel("📦 Мої проєкти")
-        title.setStyleSheet("font-size: 15px; font-weight: 800; color: #8B7CFF;")
-        
-        btn_refresh = QPushButton("🔄")
-        btn_refresh.setFixedSize(28, 28)
-        btn_refresh.setStyleSheet("QPushButton { background: #151516; border: 1px solid #27272A; border-radius: 4px; color: white; } QPushButton:hover { border-color: #8B7CFF; }")
-        btn_refresh.clicked.connect(self.scan_projects_folder)
-        
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-        header_layout.addWidget(btn_refresh)
-        main_layout.addLayout(header_layout)
-        
-        # Область скролу для карток
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
-        
-        self.container = QWidget()
-        self.container.setStyleSheet("background: transparent;")
-        self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(0, 5, 0, 0)
-        self.container_layout.setSpacing(10)
-        self.container_layout.addStretch() # Пружина знизу
-        
-        self.scroll.setWidget(self.container)
-        main_layout.addWidget(self.scroll)
-        
-    def scan_projects_folder(self):
-        """Сканує папку та динамічно створює картки елементів"""
-        # Очищаємо попередні віджети картки (крім фінального стретчу)
-        while self.container_layout.count() > 1:
-            item = self.container_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
-        projects_dir = "projects"
-        if not os.path.exists(projects_dir):
-            return
-            
-        cards_added = 0
-        for filename in os.listdir(projects_dir):
-            if filename.endswith(".json") and filename != "settings.json":
-                full_path = os.path.join(projects_dir, filename)
-                try:
-                    with open(full_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    
-                    card = ProjectCard(
-                        project_name=data.get("project_name", "Без назви"),
-                        target_lang=data.get("target_lang", "uk"),
-                        segments_count=len(data.get("segments", [])),
-                        video_path=data.get("video_path", ""),
-                        full_json_path=full_path,
-                        parent_tab=self
-                    )
-                    # Вставляємо на початок списку (перед пружиною)
-                    self.container_layout.insertWidget(cards_added, card)
-                    cards_added += 1
-                except Exception as e:
-                    print(f"Помилка рендеру картки {filename}: {e}")
-                    
-        if cards_added == 0:
-            lbl_empty = QLabel("Папка проєктів порожня.\nСтворіть новий проєкт вище!")
-            lbl_empty.setStyleSheet("color: #71717A; font-size: 12px; font-weight: 500; padding: 20px; text-align: center;")
-            self.container_layout.insertWidget(0, lbl_empty)
-
-
-class SegmentCardWidget(QWidget):
-    def __init__(self, segment: TimelineSegment, controller: LocalizationController, parent_window):
-        super().__init__()
-        self.segment = segment
-        self.controller = controller
-        self.parent_window = parent_window 
-        self.translation_timer = None # Для механізму Debounce
-        self.init_ui()
-
-    def init_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(4, 4, 4, 4)
-
-        meta_layout = QHBoxLayout()
-        time_str = f"🕒 {int(self.segment.start // 60):02}:{int(self.segment.start % 60):02}"
-        lbl_meta = QLabel(f"{time_str} | {self.segment.speaker_id} ({self.segment.gender})")
-        lbl_meta.setStyleSheet("color: #8B7CFF; font-weight: bold; font-size: 11px;")
-        meta_layout.addWidget(lbl_meta)
-        meta_layout.addStretch()
-        main_layout.addLayout(meta_layout)
-
-        fields_layout = QHBoxLayout()
-        
-        self.edit_orig = QTextEdit(self.segment.original_text)
-        self.edit_orig.setFixedHeight(50)
-        self.edit_orig.setStyleSheet("background: #111; border: 1px solid #222; color: #aaa;")
-        self.edit_orig.textChanged.connect(self.on_original_changed)
-        
-        self.edit_trans = QTextEdit(self.segment.translated_text)
-        self.edit_trans.setFixedHeight(50)
-        self.edit_trans.setStyleSheet("background: #222; border: 1px solid #333; color: #fff;")
-        self.edit_trans.textChanged.connect(self.on_translation_changed)
-
-        fields_layout.addWidget(self.edit_orig)
-        fields_layout.addWidget(self.edit_trans)
-        main_layout.addLayout(fields_layout)
-
-    def on_translation_changed(self):
-        new_text = self.edit_trans.toPlainText()
-        if self.segment.translated_text != new_text:
-            self.segment.translated_text = new_text
-            self.segment.status = "modified" 
-
-    def on_original_changed(self):
-        """Реалізація безпечного QT-Debounce для живого перекладу"""
-        new_orig = self.edit_orig.toPlainText()
-        if self.segment.original_text != new_orig:
-            self.segment.original_text = new_orig
-            self.segment.status = "modified"
-            
-            print(f"[DEBUG UI] Користувач друкує в сегменті {self.segment.id}. Запуск таймера...")
-            
-            from PySide6.QtCore import QTimer
-            import asyncio
-            
-            if hasattr(self, 'qt_debounce_timer'):
-                self.qt_debounce_timer.stop()
-            else:
-                self.qt_debounce_timer = QTimer()
-                self.qt_debounce_timer.setSingleShot(True)
-                
-            try:
-                self.qt_debounce_timer.timeout.disconnect()
-            except Exception:
-                pass
-                
-            def timeout_slot():
-                print(f"[DEBUG UI] 800 мс пройшло! Інтегруємо асинхронну таску в діючий QEventLoop для: '{new_orig[:20]}'")
-                # 🔥 ФІКС: Отримуємо поточний цикл qasync та безпечно реєструємо в ньому коротину
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self.trigger_single_translation(new_orig))
-                else:
-                    print("[DEBUG UI] Помилка: асинхронний Loop не запущений!")
-                
-            self.qt_debounce_timer.timeout.connect(timeout_slot)
-            self.qt_debounce_timer.start(800)
-
-    async def trigger_single_translation(self, text):
-        if not text.strip(): 
-            return
-        print(f"[DEBUG UI] Метод trigger_single_translation СТАРТУВАВ для сегмента {self.segment.id}")
-        try:
-            self.edit_trans.textChanged.disconnect(self.on_translation_changed)
-            
-            max_dur = float(self.segment.end - self.segment.start)
-            from core import settings
-            
-            # 🚨 ПЕРЕВІРКА НАЯВНОСТІ СЕРВІСУ:
-            # Якщо в контролері немає translate_service, ми створимо його локально прямо тут, щоб не падати!
-            if not hasattr(self.controller, 'translate_service') or self.controller.translate_service is None:
-                print("[DEBUG UI] У контролері відсутній translate_service! Створюємо екземпляр на льоту...")
-                from services.translate_service import TranslateService
-                self.controller.translate_service = TranslateService()
-                
-            print(f"[DEBUG UI] Відправка запиту в TranslateService. Мова: {settings.TARGET_LANGUAGE}")
-            
-            # Викликаємо наш новий метод
-            translated = await self.controller.translate_service.translate_single_text(
-                text, max_dur, settings.TARGET_LANGUAGE
-            )
-            
-            print(f"[DEBUG UI] Отримано відповідь перекладу: '{translated}'")
-            
-            self.segment.translated_text = translated
-            self.edit_trans.setPlainText(translated)
-            
-            self.edit_trans.textChanged.connect(self.on_translation_changed)
-            
-            if self.parent_window:
-                self.parent_window.add_log(f"✍️ Живий автопереклад для сегмента {self.segment.id} оновлено.")
-                
-        except Exception as e:
-            print(f"[DEBUG UI] КРИТИЧНА ПОМИЛКА у trigger_single_translation: {e}")
-            import traceback
-            traceback.print_exc()
-            try:
-                self.edit_trans.textChanged.connect(self.on_translation_changed)
-            except Exception:
-                pass
-
+# Модульні імпорти компонентів
+from ui.components.panels import Panel
+from ui.components.speaker_widget import SpeakerRowWidget
+from ui.components.segment_card import SegmentCardWidget
+from ui.components.projects_tab import ProjectsTabWidget
 
 class PolyGlotWindow(QMainWindow):
     def __init__(self):
@@ -375,7 +32,6 @@ class PolyGlotWindow(QMainWindow):
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
 
-        # Єдиний шеринг-плеєр для прослуховування зразків голосу (Оптимізація пам'яті)
         self.sample_player = QMediaPlayer()
         self.sample_audio_output = QAudioOutput()
         self.sample_player.setAudioOutput(self.sample_audio_output)
@@ -411,17 +67,15 @@ class PolyGlotWindow(QMainWindow):
         top_layout.addWidget(self.btn_upload)
 
         top_layout.addSpacing(30)
-        # Навігаційні кнопки верхнього бару
+        
+        # Залишаємо тільки дві функціональні кнопки (Workspace і Voices прибрано)
         self.nav_buttons = {}
-        for item in ["Workspace", "Projects", "Voices", "Settings"]:
+        for item in ["Projects", "Settings"]:
             btn = QPushButton(item)
             btn.setObjectName("NavButton")
-            self.nav_buttons[item] = btn # Зберігаємо посилання для керування стилями
-            
-            if item == "Workspace":
-                btn.clicked.connect(self.show_workspace_action)
-            elif item == "Projects":
-                btn.clicked.connect(self.toggle_projects_tab_action) # <-- НАШ НОВИЙ ТРИГЕР-КЛІК
+            self.nav_buttons[item] = btn
+            if item == "Projects":
+                btn.clicked.connect(self.toggle_projects_tab_action)
             elif item == "Settings":
                 btn.clicked.connect(self.open_settings_dialog)
             top_layout.addWidget(btn)
@@ -432,25 +86,19 @@ class PolyGlotWindow(QMainWindow):
         top_layout.addWidget(self.status_label)
         main_layout.addWidget(top_bar)
 
-        # --- ЛОКАЛЬНИЙ МЕНЕДЖЕР ПАНЕЛЕЙ (Замість глобального стек-віджета) ---
+        # --- CONTENT AREA ---
         root_content = QWidget()
         main_layout.addWidget(root_content)
-        
         workspace_layout = QVBoxLayout(root_content)
         workspace_layout.setContentsMargins(15, 15, 15, 15)
         
         self.main_splitter = QSplitter(Qt.Horizontal)
         self.main_splitter.setHandleWidth(15)
         
-        # ======================================================================
-        # 1. ЛІВА ПАНЕЛЬ: Перетворюється на динамічний стек (Editor <-> Projects)
-        # ======================================================================
-        self.transcript_panel = Panel("Transcript Hub") # Оновлений заголовок контейнера
-        
-        # 🔥 ГОЛОВНИЙ ФІКС: Створюємо локальний стек-контейнер для лівої частини
+        # 1. Dynamic Left Panel (Editor <-> Projects)
+        self.transcript_panel = Panel("Transcript Editor")
         self.left_side_stack = QStackedWidget()
         
-        # Елемент А: Сторінка редактора субтитрів
         self.editor_page = QWidget()
         editor_layout = QVBoxLayout(self.editor_page)
         editor_layout.setContentsMargins(0, 0, 0, 0)
@@ -459,26 +107,20 @@ class PolyGlotWindow(QMainWindow):
         self.transcript_list.setStyleSheet("background: #0D0D0D; border: none;")
         editor_layout.addWidget(self.transcript_list)
 
-        self.btn_confirm = QPushButton("✅ ПІДТВЕРДИТИ ТЕКСТ ТА ПОЧАТИ ДУБЛЯЖ")
+        self.btn_confirm = QPushButton("ПІДТВЕРДИТИ ТЕКСТ")
         self.btn_confirm.setObjectName("NewProjectButton")
         self.btn_confirm.setFixedHeight(45)
         self.btn_confirm.setEnabled(False)
         self.btn_confirm.clicked.connect(self.confirm_and_synthesize)
         editor_layout.addWidget(self.btn_confirm)
         
-        # Елемент Б: Сторінка списку проєктів (наш новий кастомний віджет-картки)
         self.projects_tab = ProjectsTabWidget(self)
         
-        # Додаємо сторінки в локальний лівий стек
-        self.left_side_stack.addWidget(self.editor_page)    # Індекс 0: Текст
-        self.left_side_stack.addWidget(self.projects_tab)   # Індекс 1: Список проєктів
-        
-        # Вставляємо стек у тіло лівої панелі
+        self.left_side_stack.addWidget(self.editor_page)  # Index 0
+        self.left_side_stack.addWidget(self.projects_tab) # Index 1
         self.transcript_panel.body.addWidget(self.left_side_stack)
 
-        # ======================================================================
-        # 2. МІДЛ ПАНЕЛЬ: Відеоплеєр та системна консоль логів (завжди на екрані!)
-        # ======================================================================
+        # 2. Middle Panel (Player + Console)
         mid_container = QWidget()
         mid_layout = QVBoxLayout(mid_container)
         mid_layout.setSpacing(15)
@@ -517,9 +159,7 @@ class PolyGlotWindow(QMainWindow):
         self.console_panel.body.addWidget(self.log_console)
         mid_layout.addWidget(self.console_panel, stretch=3)
 
-        # ======================================================================
-        # 3. ПРАВА ПАНЕЛЬ: Спікери та пайплайн
-        # ======================================================================
+        # 3. Right Panel (Speakers + Progress)
         right_container = QWidget()
         right_layout = QVBoxLayout(right_container)
         right_layout.setSpacing(15)
@@ -547,167 +187,25 @@ class PolyGlotWindow(QMainWindow):
         right_layout.addWidget(self.speaker_panel, stretch=3)
         right_layout.addWidget(self.pipeline_panel, stretch=2)
 
-        # Збираємо Сплітер докупи
         self.main_splitter.addWidget(self.transcript_panel)
         self.main_splitter.addWidget(mid_container)
         self.main_splitter.addWidget(right_container)
         self.main_splitter.setStretchFactor(1, 4)
         workspace_layout.addWidget(self.main_splitter)
 
-
-    def animate_left_panel_transition(self, target_index, new_title):
-        """Пункт 2: Плавна кінематографічна анімація зміни віджетів у лівій панелі"""
-        from PySide6.QtCore import QPropertyAnimation, QParallelAnimationGroup, QEasingCurve
-        from PySide6.QtWidgets import QGraphicsOpacityEffect
-
-        current_widget = self.left_side_stack.currentWidget()
-        target_widget = self.left_side_stack.widget(target_index)
-
-        if current_widget == target_widget:
-            return
-
-        # Налаштовуємо ефекти прозорості для обох віджетів
-        eff_current = QGraphicsOpacityEffect(current_widget)
-        current_widget.setGraphicsEffect(eff_current)
-        
-        eff_target = QGraphicsOpacityEffect(target_widget)
-        target_widget.setGraphicsEffect(eff_target)
-
-        # Анімація згасання поточної панелі
-        anim_out = QPropertyAnimation(eff_current, b"opacity")
-        anim_out.setDuration(250)
-        anim_out.setStartValue(1.0)
-        anim_out.setEndValue(0.0)
-        anim_out.setEasingCurve(QEasingCurve.OutCubic)
-
-        # Анімація появи нової панелі
-        anim_in = QPropertyAnimation(eff_target, b"opacity")
-        anim_in.setDuration(300)
-        anim_in.setStartValue(0.0)
-        anim_in.setEndValue(1.0)
-        anim_in.setEasingCurve(QEasingCurve.InCubic)
-
-        # Зсув по горизонталі (ефект виїзду зліва направо / справа наліво)
-        # Для простоти й стабільності сплітера, робимо плавний Fade-X ефект через зміну магічних маргінів
-        anim_move = QPropertyAnimation(target_widget, b"pos")
-        anim_move.setDuration(300)
-        if target_index == 1: # Проєкти виїжджають справа наліво
-            target_widget.move(self.left_side_stack.width(), 0)
-            anim_move.setEndValue(self.left_side_stack.rect().topLeft())
-        else: # Редактор виїжджає зліва направо
-            target_widget.move(-self.left_side_stack.width(), 0)
-            anim_move.setEndValue(self.left_side_stack.rect().topLeft())
-        anim_move.setEasingCurve(QEasingCurve.OutQuad)
-
-        # Збираємо в групу
-        self.panel_animation_group = QParallelAnimationGroup()
-        self.panel_animation_group.addAnimation(anim_out)
-        self.panel_animation_group.addAnimation(anim_in)
-        self.panel_animation_group.addAnimation(anim_move)
-
-        # Коли анімація закінчується, остаточно перемикаємо індекс і чистимо ефекти
-        def on_anim_finished():
-            self.left_side_stack.setCurrentIndex(target_index)
-            self.transcript_panel.title.setText(new_title)
-            current_widget.setGraphicsEffect(None)
-            target_widget.setGraphicsEffect(None)
-
-        self.panel_animation_group.finished.connect(on_anim_finished)
-        
-        # Робимо таргет-віджет видимим перед початком анімації появи
-        target_widget.setVisible(True)
-        self.left_side_stack.setCurrentIndex(target_index)
-        self.panel_animation_group.start()
-
-    def toggle_projects_tab_action(self):
-        """Пункт 1: Розумний кнопка-тригер. Відкриває або закриває панель проектів із підсвічуванням"""
-        btn = self.nav_buttons.get("Projects")
-        
-        # Якщо зараз видно Транскрипт (індекс 0) -> Перемикаємо на Проєкти (індекс 1)
-        if self.left_side_stack.currentIndex() == 0:
-            self.projects_tab.scan_projects_folder()
-            self.animate_left_panel_transition(1, "📦 ПРОЄКТИ")
-            self.add_log("📂 Відкриття менеджера локальних проєктів у бічній панелі.")
-            
-            # Стилізуємо кнопку як АКТИВНУ/ФОКУСОВАНУ (Неоновий фіолетовий бордюр та фон)
-            if btn:
-                btn.setStyleSheet("""
-                    QPushButton { 
-                        background: rgba(139, 124, 255, 0.2); 
-                        border: 1px solid #8B7CFF; 
-                        color: #FFFFFF; 
-                        font-weight: bold;
-                    }
-                """)
-        else:
-            # Повторне натискання -> Повертаємо редактор субтитрів назад!
-            self.show_workspace_action()
-
-    def show_workspace_action(self):
-        """Повертає ліву панель у режим редагування тексту субтитрів"""
-        self.animate_left_panel_transition(0, "Transcript Editor")
-        btn = self.nav_buttons.get("Projects")
-        if btn:
-            btn.setStyleSheet("") # Скидаємо кастомний активний стиль на стандартний з apply_styles
-        self.add_log("📝 Повернення до редактора субтитрів.")
-
-    def show_projects_tab_action(self):
-        """Перемикає ліву панель на картки проєктів та сканує папку"""
-        self.projects_tab.scan_projects_folder()
-        self.left_side_stack.setCurrentIndex(1) # Перемикаємо лівий блок на індекс 1
-        self.transcript_panel.title.setText("📦 ПРОЄКТИ") # Динамічно оновлюємо заголовок панелі
-        self.add_log("📂 Відображення менеджера локальних проєктів у бічній панелі.")
-
-    def load_existing_project(self, json_path):
-        """Завантажує обраний проєкт та повертає текстовий редактор субтитрів"""
-        try:
-            self.add_log(f"⏳ Відновлення стану з файлу: {os.path.basename(json_path)}...")
-            
-            # Відновлення через фабрику
-            self.controller = LocalizationController.load_from_json(json_path)
-            
-            from core import settings
-            settings.TARGET_LANGUAGE = self.controller.project.target_lang
-            self.connect_signals()
-            
-            # Рендер плеєра
-            v_path = self.controller.project.video_path
-            if os.path.exists(v_path):
-                self.media_player.setSource(QUrl.fromLocalFile(v_path))
-            
-            # Заповнення списку картками субтитрів
-            self.fill_transcript(self.controller.project.segments)
-            
-            #  ПУНКТ 2: Скидаємо підсвітку і стан кнопки Projects, бо ми повернулися в Workspace
-            btn = self.nav_buttons.get("Projects")
-            if btn:
-                btn.setStyleSheet("") # Скидає кастомний неоновий стиль на дефолтний
-            
-            # Повертаємо ліву панель у режим редагування!
-            self.left_side_stack.setCurrentIndex(0)
-            self.transcript_panel.title.setText("Transcript Editor")
-            self.add_log(f"🎉 Проєкт '{self.controller.project.project_name}' завантажено в Workspace.")
-            
-        except Exception as e:
-            self.add_log(f"❌ Помилка відкриття проєкту: {e}")
-
-
     def connect_signals(self):
         if self.controller:
             self.controller.status_changed.connect(self.add_log)
             self.controller.sync_required.connect(self.fill_transcript)
-            
             self.controller.overall_progress.connect(self.progress_widgets["Overall"].setValue)
             self.controller.audio_progress.connect(self.progress_widgets["Audio"].setValue)
             self.controller.stt_progress.connect(self.progress_widgets["STT"].setValue)
             self.controller.translate_progress.connect(self.progress_widgets["Translate"].setValue)
             self.controller.tts_progress.connect(self.progress_widgets["Synthesis"].setValue)
-            
             self.controller.step_completed.connect(self.on_pipeline_step_completed)
             self.add_log("✅ Канали зв'язку з ШІ-модулем налаштовано")
 
     def play_shared_sample(self, ref_wav, speaker_id):
-        """Метод єдиного плеєра для еталонів голосу"""
         if ref_wav and os.path.exists(ref_wav):
             if self.media_player.playbackState() == QMediaPlayer.PlayingState:
                 self.media_player.pause()
@@ -715,108 +213,144 @@ class PolyGlotWindow(QMainWindow):
             self.sample_player.setSource(QUrl.fromLocalFile(ref_wav))
             self.sample_player.play()
             self.add_log(f"🔊 Прослуховування еталону голосу для {speaker_id}")
-        else:
-            self.add_log(f"⚠️ Файл зразка для {speaker_id} не знайдено.")
 
     def update_speaker_inspector(self):
-        """Рендеринг оновлених високих карток спікерів у правому інспекторі"""
         self.speaker_list.clear()
         if not self.controller or not self.controller.project: return
         project = self.controller.project
-        
         if not project.speaker_voice_map: return
             
         for speaker_id, ref_path in project.speaker_voice_map.items():
-            # Нам більше не потрібно шукати seg.gender, оскільки ми прибрали написи статі з UI!
-            detected_gender = "Unknown"
-            
             item = QListWidgetItem(self.speaker_list)
-            row_widget = SpeakerRowWidget(speaker_id, detected_gender, ref_path, self)
-            
-            # 🔥 ГОЛОВНИЙ ФІКС: Примусово робимо висоту елемента списку більшою, щоб нічого не обрізалося!
+            row_widget = SpeakerRowWidget(speaker_id, ref_path, self)
             from PySide6.QtCore import QSize
-            item.setSizeHint(QSize(row_widget.sizeHint().width(), 52)) # 52px — ідеальна висота для картки
-            
+            item.setSizeHint(QSize(row_widget.sizeHint().width(), 52))
             self.speaker_list.addItem(item)
             self.speaker_list.setItemWidget(item, row_widget)
             
         self.add_log(f"👥 Інспектор спікерів оновлено. Профілів: {len(project.speaker_voice_map)}")
 
+    def animate_left_panel_transition(self, target_index, new_title):
+        from PySide6.QtCore import QPropertyAnimation, QParallelAnimationGroup, QEasingCurve
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+
+        current_widget = self.left_side_stack.currentWidget()
+        target_widget = self.left_side_stack.widget(target_index)
+
+        if current_widget == target_widget: return
+
+        eff_current = QGraphicsOpacityEffect(current_widget)
+        current_widget.setGraphicsEffect(eff_current)
+        eff_target = QGraphicsOpacityEffect(target_widget)
+        target_widget.setGraphicsEffect(eff_target)
+
+        anim_out = QPropertyAnimation(eff_current, b"opacity")
+        anim_out.setDuration(250)
+        anim_out.setStartValue(1.0)
+        anim_out.setEndValue(0.0)
+        anim_out.setEasingCurve(QEasingCurve.OutCubic)
+
+        anim_in = QPropertyAnimation(eff_target, b"opacity")
+        anim_in.setDuration(300)
+        anim_in.setStartValue(0.0)
+        anim_in.setEndValue(1.0)
+        anim_in.setEasingCurve(QEasingCurve.InCubic)
+
+        anim_move = QPropertyAnimation(target_widget, b"pos")
+        anim_move.setDuration(300)
+        if target_index == 1:
+            target_widget.move(self.left_side_stack.width(), 0)
+            anim_move.setEndValue(self.left_side_stack.rect().topLeft())
+        else:
+            target_widget.move(-self.left_side_stack.width(), 0)
+            anim_move.setEndValue(self.left_side_stack.rect().topLeft())
+        anim_move.setEasingCurve(QEasingCurve.OutQuad)
+
+        self.panel_animation_group = QParallelAnimationGroup()
+        self.panel_animation_group.addAnimation(anim_out)
+        self.panel_animation_group.addAnimation(anim_in)
+        self.panel_animation_group.addAnimation(anim_move)
+
+        def on_anim_finished():
+            self.left_side_stack.setCurrentIndex(target_index)
+            self.transcript_panel.title.setText(new_title)
+            current_widget.setGraphicsEffect(None)
+            target_widget.setGraphicsEffect(None)
+
+        self.panel_animation_group.finished.connect(on_anim_finished)
+        target_widget.setVisible(True)
+        self.left_side_stack.setCurrentIndex(target_index)
+        self.panel_animation_group.start()
+
+    def toggle_projects_tab_action(self):
+        btn = self.nav_buttons.get("Projects")
+        if self.left_side_stack.currentIndex() == 0:
+            self.projects_tab.scan_projects_folder()
+            self.animate_left_panel_transition(1, "📦 ПРОЄКТИ")
+            self.add_log("📂 Відображення менеджера локальних проєктів у бічній панелі.")
+            if btn:
+                btn.setStyleSheet("QPushButton { background: rgba(139, 124, 255, 0.2); border: 1px solid #8B7CFF; color: #FFFFFF; font-weight: bold; }")
+        else:
+            self.show_workspace_action()
+
+    def show_workspace_action(self):
+        self.animate_left_panel_transition(0, "Transcript Editor")
+        btn = self.nav_buttons.get("Projects")
+        if btn: btn.setStyleSheet("")
+        self.add_log("📝 Повернення до редактора субтитрів.")
+
+    def load_existing_project(self, json_path):
+        try:
+            self.add_log(f"⏳ Відновлення стану з файлу: {os.path.basename(json_path)}...")
+            self.controller = LocalizationController.load_from_json(json_path)
+            
+            from core import settings
+            settings.TARGET_LANGUAGE = self.controller.project.target_lang
+            self.connect_signals()
+            
+            v_path = self.controller.project.video_path
+            if os.path.exists(v_path):
+                self.media_player.setSource(QUrl.fromLocalFile(v_path))
+            
+            self.fill_transcript(self.controller.project.segments)
+            
+            btn = self.nav_buttons.get("Projects")
+            if btn: btn.setStyleSheet("")
+            
+            self.left_side_stack.setCurrentIndex(0)
+            self.transcript_panel.title.setText("Transcript Editor")
+            self.add_log(f"🎉 Проєкт '{self.controller.project.project_name}' завантажено в Workspace.")
+        except Exception as e:
+            self.add_log(f"❌ Помилка відкриття проєкту: {e}")
+
     def open_settings_dialog(self):
-        """Пункт 1 та 3: Оновлений дизайнерський інтерфейс налаштувань програми"""
-        from PySide6.QtWidgets import (
-            QDialog, QDialogButtonBox, QCheckBox, QLineEdit, QFormLayout, 
-            QComboBox, QPushButton, QMessageBox, QGroupBox, QVBoxLayout, QHBoxLayout
-        )
-        import shutil
+        from PySide6.QtWidgets import QGroupBox, QDialogButtonBox
         from core import settings
         
         dialog = QDialog(self)
         dialog.setWindowTitle("PolyGlot AI Studio — Конфігурація системи")
         dialog.setMinimumWidth(600)
         
-        # 📌 Глобальний стиль для вікна налаштувань
         dialog.setStyleSheet("""
-            QDialog { 
-                background-color: #0D0D0E; 
-            }
-            QLabel { 
-                color: #A1A1AA; 
-                font-size: 12px; 
-                font-weight: 500;
-            }
+            QDialog { background-color: #0D0D0E; }
+            QLabel { color: #A1A1AA; font-size: 12px; font-weight: 500; }
             QGroupBox { 
-                background-color: #151516; 
-                border: 1px solid #27272A; 
-                border-radius: 8px; 
-                margin-top: 16px; 
-                padding-top: 12px;
-                font-weight: bold;
-                color: #FFFFFF;
+                background-color: #151516; border: 1px solid #27272A; border-radius: 8px; 
+                margin-top: 16px; padding-top: 12px; font-weight: bold; color: #FFFFFF;
             }
-            QGroupBox::title { 
-                subcontrol-origin: margin; 
-                subcontrol-position: top left; 
-                padding: 0 8px; 
-                margin-left: 10px;
-                color: #8B7CFF;
-            }
-            QLineEdit, QComboBox { 
-                background-color: #202022; 
-                border: 1px solid #27272A; 
-                border-radius: 6px; 
-                padding: 6px 10px; 
-                color: #FFFFFF; 
-                font-size: 12px;
-            }
-            QLineEdit:focus, QComboBox:focus { 
-                border-color: #8B7CFF; 
-            }
-            QCheckBox { 
-                color: #E4E4E7; 
-                font-size: 12px; 
-                spacing: 8px;
-            }
-            QCheckBox::indicator { 
-                width: 16px; 
-                height: 16px; 
-                border: 1px solid #3F3F46; 
-                border-radius: 4px; 
-                background: #202022;
-            }
-            QCheckBox::indicator:checked { 
-                background-color: #8B7CFF; 
-                border-color: #8B7CFF;
-            }
+            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; margin-left: 10px; color: #8B7CFF; }
+            QLineEdit, QComboBox { background-color: #202022; border: 1px solid #27272A; border-radius: 6px; padding: 6px 10px; color: #FFFFFF; font-size: 12px; }
+            QLineEdit:focus, QComboBox:focus { border-color: #8B7CFF; }
+            QCheckBox { color: #E4E4E7; font-size: 12px; spacing: 8px; }
+            QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #3F3F46; border-radius: 4px; background: #202022; }
+            QCheckBox::indicator:checked { background-color: #8B7CFF; border-color: #8B7CFF; }
         """)
         
         main_vertical_layout = QVBoxLayout(dialog)
         main_vertical_layout.setContentsMargins(20, 10, 20, 20)
         main_vertical_layout.setSpacing(10)
         
-        # ----------------------------------------------------------------------
-        # 🧠 СЕКЦІЯ 1: Мовний рушій (Translation)
-        # ----------------------------------------------------------------------
+        # --- СЕКЦІЯ 1: Переклад ---
         group_translation = QGroupBox("Модуль перекладу та локалізації")
         trans_layout = QFormLayout(group_translation)
         trans_layout.setSpacing(12)
@@ -835,12 +369,9 @@ class PolyGlotWindow(QMainWindow):
         combo_lang.addItems(["uk", "en", "es", "de", "fr"])
         combo_lang.setCurrentText(settings.TARGET_LANGUAGE)
         trans_layout.addRow("Цільова мова за замовчуванням:", combo_lang)
-        
         main_vertical_layout.addWidget(group_translation)
         
-        # ----------------------------------------------------------------------
-        # 🎙️ СЕКЦІЯ 2: Розпізнавання мови (STT)
-        # ----------------------------------------------------------------------
+        # --- СЕКЦІЯ 2: Whisper STT ---
         group_stt = QGroupBox("Параметри розпізнавання (Whisper STT)")
         stt_layout = QFormLayout(group_stt)
         stt_layout.setSpacing(12)
@@ -849,17 +380,13 @@ class PolyGlotWindow(QMainWindow):
         combo_whisper.addItems(["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"])
         combo_whisper.setCurrentText(settings.WHISPER_MODEL_SIZE)
         stt_layout.addRow("Нейронна модель розпізнавання:", combo_whisper)
-        
         main_vertical_layout.addWidget(group_stt)
         
-        # ----------------------------------------------------------------------
-        # 🗑️ СЕКЦІЯ 3: Системні утиліти (Maintenance) — З ПІДРАХУНКОМ РОЗМІРУ КЕШУ
-        # ----------------------------------------------------------------------
+        # --- СЕКЦІЯ 3: Кеш ---
         group_system = QGroupBox("Обслуговування системи")
         system_layout = QHBoxLayout(group_system)
         system_layout.setContentsMargins(15, 15, 15, 15)
         
-        # 🧠 Функція для підрахунку реального розміру кешу на диску
         def get_cache_size_mb():
             total_size = 0
             for folder in [settings.CACHE_AUDIO_DIR, settings.CACHE_DEMUCS_DIR]:
@@ -867,34 +394,20 @@ class PolyGlotWindow(QMainWindow):
                     for dirpath, _, filenames in os.walk(folder):
                         for f in filenames:
                             fp = os.path.join(dirpath, f)
-                            # Пропускаємо символічні посилання, рахуємо тільки фізичні файли
                             if os.path.exists(fp) and not os.path.islink(fp):
                                 total_size += os.path.getsize(fp)
-            # Переводимо байти в мегабайти (1 МБ = 1024 * 1024 байт)
             return total_size / (1024 * 1024)
 
         current_cache_size = get_cache_size_mb()
         
-        # Виводимо інформацію користувачу (округлюємо до 1 знака після коми)
         lbl_cache_info = QLabel(f"Тимчасові ШІ-файли (Аудіо, Вокал, Фон).<br>Зайнято на диску: <b style='color: #8B7CFF;'>{current_cache_size:.1f} МБ</b>")
         lbl_cache_info.setStyleSheet("color: #A1A1AA; line-height: 15px;")
         
         btn_clear_cache = QPushButton("🗑️ Очистити кеш")
         btn_clear_cache.setFixedWidth(140)
         btn_clear_cache.setStyleSheet("""
-            QPushButton { 
-                background-color: #27272A; 
-                border: 1px solid #3F3F46; 
-                color: #F4F4F5; 
-                font-weight: 600; 
-                padding: 6px; 
-                border-radius: 6px; 
-            }
-            QPushButton:hover { 
-                background-color: #7f1d1d; 
-                border-color: #ef4444; 
-                color: #FFFFFF; 
-            }
+            QPushButton { background-color: #27272A; border: 1px solid #3F3F46; color: #F4F4F5; font-weight: 600; padding: 6px; border-radius: 6px; }
+            QPushButton:hover { background-color: #7f1d1d; border-color: #ef4444; color: #FFFFFF; }
         """)
         
         def clear_cache_action():
@@ -911,49 +424,25 @@ class PolyGlotWindow(QMainWindow):
                             deleted_counts += 1
                         except Exception:
                             pass
-            
             QMessageBox.information(dialog, "Успіх", f"Кеш повністю очищено. Видалено {deleted_counts} об'єктів.")
             self.add_log("🧹 Користувач повністю очистив тимчасовий кеш проєкту.")
-            
-            # 🔥 Динамічно оновлюємо текст на лейблі відразу після видалення файлів!
             lbl_cache_info.setText("Тимчасові ШІ-файли (Аудіо, Вокал, Фон).<br>Зайнято на диску: <b style='color: #8B7CFF;'>0.0 МБ</b>")
             
         btn_clear_cache.clicked.connect(clear_cache_action)
         system_layout.addWidget(lbl_cache_info)
         system_layout.addStretch()
         system_layout.addWidget(btn_clear_cache)
-        
+        group_system.setLayout(system_layout)
         main_vertical_layout.addWidget(group_system)
-        main_vertical_layout.addSpacing(10)
         
-        # ----------------------------------------------------------------------
-        # 🎛️ Фінальні кнопки збереження (Dialog Buttons)
-        # ----------------------------------------------------------------------
+        # Фінальні кнопки Ok/Cancel
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
         buttons.setStyleSheet("""
-            QPushButton { 
-                background-color: #202022; 
-                border: 1px solid #27272A; 
-                color: #FFFFFF; 
-                padding: 6px 20px; 
-                border-radius: 6px; 
-                font-weight: 500;
-                min-width: 80px;
-            }
-            QPushButton:hover { 
-                background-color: #27272A; 
-            }
-            QPushButton[text="OK"] { 
-                background-color: #8B7CFF; 
-                color: #000000; 
-                font-weight: 600; 
-                border: none;
-            }
-            QPushButton[text="OK"]:hover { 
-                background-color: #A396FF; 
-            }
+            QPushButton { background-color: #202022; border: 1px solid #27272A; color: #FFFFFF; padding: 6px 20px; border-radius: 6px; min-width: 80px; }
+            QPushButton:hover { background-color: #27272A; }
+            QPushButton[text="OK"] { background-color: #8B7CFF; color: #000000; font-weight: 600; border: none; }
+            QPushButton[text="OK"]:hover { background-color: #A396FF; }
         """)
-        
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         main_vertical_layout.addWidget(buttons)
@@ -963,77 +452,34 @@ class PolyGlotWindow(QMainWindow):
             settings.GEMINI_API_KEY = le_key.text().strip()
             settings.TARGET_LANGUAGE = combo_lang.currentText()
             settings.WHISPER_MODEL_SIZE = combo_whisper.currentText()
-            
             self.add_log(f"⚙️ Налаштування збережено! Мова: {settings.TARGET_LANGUAGE} | Whisper: {settings.WHISPER_MODEL_SIZE}")
-
-    @Slot(str, str)
-    def on_pipeline_step_completed(self, step_type, media_path):
-        if step_type == "ANALYSIS_DONE":
-            self.add_log("🎉 Фаза аналізу завершена. Текст готовий до валідації.")
-            # 🔥 ФІКС: Оновлюємо інспектор відразу після аналізу мови!
-            self.update_speaker_inspector()
-        elif step_type == "SYNTHESIS_DONE":
-            self.add_log(f"📺 Автоперемикання плеєра на готове дубльоване відео: {media_path}")
-            self.media_player.setSource(QUrl.fromLocalFile(media_path))
-            self.media_player.play()
-            self.play_btn.setText("⏸")
-            self.btn_confirm.setEnabled(True)
-            self.btn_confirm.setText("✅ ПІДТВЕРДИТИ ТЕКСТ ТА ПОЧАТИ ДУБЛЯЖ")
-
-    def on_player_position_changed(self, position):
-        if not self.time_slider.isSliderDown():
-            self.time_slider.setValue(position)
-        self.update_time_label(position, self.media_player.duration())
-
-    def on_player_duration_changed(self, duration):
-        self.time_slider.setRange(0, duration)
-
-    def set_player_position(self, position):
-        self.media_player.setPosition(position)
-
-    def update_time_label(self, position, duration):
-        pos_sec = position // 1000
-        dur_sec = duration // 1000
-        self.lbl_time.setText(f"{int(pos_sec // 60):02}:{int(pos_sec % 60):02} / {int(dur_sec // 60):02}:{int(dur_sec % 60):02}")
-
-    @Slot(str)
-    def add_log(self, message):
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        self.log_console.append(f"<span style='color:#888;'>[{timestamp}]</span> {message}")
-        self.status_label.setText(message)
 
     @asyncSlot()
     async def open_new_project(self):
-        
         self.left_side_stack.setCurrentIndex(0)
         self.transcript_panel.title.setText("Transcript Editor")
         if "Projects" in self.nav_buttons:
-            self.nav_buttons["Projects"].setDown(False)
-            self.nav_buttons["Projects"].setStyleSheet("") # Скидаємо фокус-стиль
-
-        path, _ = QFileDialog.getOpenFileName(self, "Select Video", "", "Video (*.mp4 *.mkv *.avi)")
-        if not path: return
+            self.nav_buttons["Projects"].setStyleSheet("")
+            
         path, _ = QFileDialog.getOpenFileName(self, "Select Video", "", "Video (*.mp4 *.mkv *.avi)")
         if not path: return
 
-        self.add_log(f"📁 Файл обрано: {path}")
         languages = ["English", "Ukrainian", "French", "German", "Spanish"]
         lang, ok = QInputDialog.getItem(self, "Settings", "Target Language:", languages, 0, False)
         
         if ok and lang:
             lang_map = {"English": "en", "Ukrainian": "uk", "French": "fr", "German": "de", "Spanish": "es"}
             target_iso = lang_map.get(lang, "en")
-
-            # 🔥 ФІКС: Записуємо мову всюди, щоб сервіси її бачили
+            
             from core import settings
             settings.TARGET_LANGUAGE = target_iso 
 
             self.media_player.setSource(QUrl.fromLocalFile(path))
             self.add_log("🎬 Оригінальне відео завантажено в плеєр")
             self.btn_confirm.setText("⏳ ОБРОБКА ШІ...")
-
+            
             self.controller = LocalizationController(path)
-            self.controller.project.target_lang = target_iso # Для збереження в JSON
+            self.controller.project.target_lang = target_iso
             self.connect_signals()
             await self.controller.run_full_analysis()
 
@@ -1061,7 +507,7 @@ class PolyGlotWindow(QMainWindow):
         
         self.add_log(f"✅ Успішно завантажено {len(segments)} інтерактивних карток")
         self.btn_confirm.setEnabled(True)
-        self.btn_confirm.setText("✅ ПІДТВЕРДИТИ ТЕКСТ ТА ПОЧАТИ ДУБЛЯЖ")
+        self.btn_confirm.setText("ПІДТВЕРДИТИ ТЕКСТ")
         self.update_speaker_inspector()
 
     @Slot()
@@ -1071,7 +517,7 @@ class PolyGlotWindow(QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(
             self, "Оберіть місце для збереження", 
-            self.controller.project.project_name + "_localized.mp4", "Відео файли (*.mp4)"
+            self.controller.project.output_video_path or (self.controller.project.project_name + "_localized.mp4"), "Відео файли (*.mp4)"
         )
         if path:
             self.controller.project.output_video_path = path
@@ -1085,55 +531,66 @@ class PolyGlotWindow(QMainWindow):
             self.media_player.play()
             self.play_btn.setText("⏸")
 
+    @Slot(str, str)
+    def on_pipeline_step_completed(self, step_type, media_path):
+        if step_type == "ANALYSIS_DONE":
+            self.add_log("🎉 Фаза аналізу завершена. Текст готовий до валідації.")
+            self.update_speaker_inspector()
+        elif step_type == "SYNTHESIS_DONE":
+            self.add_log(f"📺 Автоперемикання плеєра на готове дубльоване відео: {media_path}")
+            self.media_player.setSource(QUrl.fromLocalFile(media_path))
+            self.media_player.play()
+            self.play_btn.setText("⏸")
+            self.btn_confirm.setEnabled(True)
+            self.btn_confirm.setText("ПІДТВЕРДИТИ ТЕКСТ")
+
+    def on_player_position_changed(self, position):
+        if not self.time_slider.isSliderDown():
+            self.time_slider.setValue(position)
+        self.update_time_label(position, self.media_player.duration())
+
+    def on_player_duration_changed(self, duration):
+        self.time_slider.setRange(0, duration)
+
+    def set_player_position(self, position):
+        self.media_player.setPosition(position)
+
+    def update_time_label(self, position, duration):
+        pos_sec = position // 1000
+        dur_sec = duration // 1000
+        self.lbl_time.setText(f"{int(pos_sec // 60):02}:{int(pos_sec % 60):02} / {int(dur_sec // 60):02}:{int(dur_sec % 60):02}")
+
+    @Slot(str)
+    def add_log(self, message):
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        self.log_console.append(f"<span style='color:#888;'>[{timestamp}]</span> {message}")
+        self.status_label.setText(message)
+
     def apply_styles(self):
         self.setStyleSheet("""
             QMainWindow { background: #0A0A0A; }
             QWidget { color: #E0E0E0; font-family: 'Inter', sans-serif; }
-            
-            /* --- TOPBAR --- */
             #TopBar { background: #111111; border-bottom: 1px solid #1F1F1F; }
             #Logo { font-size: 16px; font-weight: 900; color: #8B7CFF; margin-right: 15px; letter-spacing: 1px; }
             
-            /* Нові універсальні стилі для навігаційних кнопок (Пункт 1) */
             QPushButton#NavButton {
-                background: #18181B;
-                border: 1px solid #27272A;
-                border-radius: 6px;
-                color: #A1A1AA;
-                font-weight: 500;
-                font-size: 12px;
-                padding: 6px 14px;
-                min-width: 85px;
+                background: #18181B; border: 1px solid #27272A; border-radius: 6px;
+                color: #A1A1AA; font-weight: 500; font-size: 12px; padding: 6px 14px; min-width: 85px;
             }
-            QPushButton#NavButton:hover {
-                background: #27272A;
-                border-color: #3F3F46;
-                color: #FFFFFF;
-            }
-            QPushButton#NavButton:pressed {
-                border-color: #8B7CFF;
-                background: rgba(139, 124, 255, 0.1);
-            }
+            QPushButton#NavButton:hover { background: #27272A; border-color: #3F3F46; color: #FFFFFF; }
+            QPushButton#NavButton:pressed { border-color: #8B7CFF; background: rgba(139, 124, 255, 0.1); }
             
             #NewProjectButton { background: #8B7CFF; color: black; border-radius: 8px; padding: 6px 14px; font-weight: 600; }
             #NewProjectButton:disabled { background: #333; color: #666; }
-            
             #Panel { background: #121212; border: 1px solid #1F1F1F; border-radius: 20px; }
             #PanelTitle { color: #555; font-size: 13px; font-weight: 800; text-transform: uppercase; }
             #LogConsole { background: #080808; border: none; font-family: 'Consolas'; font-size: 11px; color: #8B7CFF; }
             #VideoPlayer { background: #000; border-radius: 20px; }
             
-            /* ПУНКТ 3: Оптимізований компактний WarningBadge */
             #WarningBadge { 
-                background: rgba(139, 124, 255, 0.07); 
-                color: #8B7CFF; 
-                border: 1px solid rgba(139, 124, 255, 0.25); 
-                border-radius: 6px; 
-                padding: 2px 10px; 
-                font-size: 11px; 
-                font-weight: 500;
+                background: rgba(139, 124, 255, 0.07); color: #8B7CFF; border: 1px solid rgba(139, 124, 255, 0.25); 
+                border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 500;
             }
-            
             QProgressBar { background: #1A1A1A; border-radius: 4px; height: 6px; text-align: center; color: transparent; }
             QProgressBar::chunk { background: #8B7CFF; }
             QSlider::groove:horizontal { height: 4px; background: #222; border-radius: 2px; }

@@ -2,12 +2,11 @@
     "video_path": "C:\\unik\\diplom\\data\\input.mp4",
     "project_name": "input",
     "source_lang": "auto",
-    "target_lang": "es",
+    "target_lang": "en",
     "vocals_path": "c:\\unik\\diplom\\output\\demucs_output\\input_vocals.wav",
     "background_path": "c:\\unik\\diplom\\output\\demucs_output\\input_no_vocals.wav",
     "output_video_path": "c:\\unik\\diplom\\output\\translated_video.mp4",
     "speaker_voice_map": {
-        "SPEAKER_01": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_01.wav",
         "SPEAKER_00": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_00.wav"
     },
     "segments": [
@@ -16,132 +15,120 @@
             "start": 0.0,
             "end": 1.62,
             "original_text": "А у вас теж так само.",
-            "translated_text": "Y contigo pasa lo mismo.",
-            "speaker_id": "SPEAKER_01",
+            "translated_text": "And it's the same with you.",
+            "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_0.wav",
+            "status": "rendered"
         },
         {
             "id": 1,
             "start": 2.54,
             "end": 11.46,
             "original_text": "Від себе ховаєшся, дні проковтуєш, виклики оминаєш, змін боїшся, звуки тримтиш.",
-            "translated_text": "Te escondes de ti mismo, te tragas los días, evitas los desafíos, tienes miedo de los cambios, reprimes los sonidos.",
+            "translated_text": "You hide from yourself, you swallow days, you avoid challenges, you are afraid of changes, you suppress sounds.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_1.wav",
+            "status": "rendered"
         },
         {
             "id": 2,
             "start": 12.18,
             "end": 13.06,
             "original_text": "Спробуй інакше.",
-            "translated_text": "Pruebe de otra manera.",
+            "translated_text": "Try another way.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_2.wav",
+            "status": "rendered"
         },
         {
             "id": 3,
             "start": 14.1,
-            "end": 24.24,
+            "end": 24.26,
             "original_text": "Рано чекаєш, нове любиш, чуже приймаєш, лице під вітер, майбутнє мрієш, плани штовхаєш.",
-            "translated_text": "Esperas temprano, amas las cosas nuevas, aceptas las demás, enfrentas el viento, sueñas con el futuro, impulsas tus planes.",
+            "translated_text": "You wait early, you love new things, you accept others, you face the wind, you dream of the future, you push your plans.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_3.wav",
+            "status": "rendered"
         },
         {
             "id": 4,
-            "start": 24.24,
+            "start": 24.26,
             "end": 27.54,
-            "original_text": "Дні такі сірі, але шпарби в тебе.",
-            "translated_text": "Los días son muy grises, pero tienes cicatrices.",
+            "original_text": "Дні такі сірі, але фарби в тебе.",
+            "translated_text": "The days are so gray, but you have colors.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_4.wav",
+            "status": "rendered"
         },
         {
             "id": 5,
             "start": 27.54,
             "end": 32.62,
             "original_text": "Чекати так важко, але ти зможеш, і буває страшно.",
-            "translated_text": "Es muy difícil esperar, pero se puede y da miedo.",
+            "translated_text": "It's so hard to wait, but you can, and it's scary.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_5.wav",
+            "status": "rendered"
         },
         {
             "id": 6,
             "start": 33.16,
             "end": 38.42,
             "original_text": "Але злість сильніша, час минає, а попереду більше.",
-            "translated_text": "Pero la ira es más fuerte, el tiempo pasa y hay más por delante.",
+            "translated_text": "But anger is stronger, time is passing, and more is ahead.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_6.wav",
+            "status": "rendered"
         },
         {
             "id": 7,
             "start": 39.06,
-            "end": 42.08,
+            "end": 42.06,
             "original_text": "Яке ж завтра буде, все буде добре.",
-            "translated_text": "Sea lo que sea mañana, todo estará bien.",
+            "translated_text": "Whatever tomorrow will be, everything will be fine.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_7.wav",
+            "status": "rendered"
         },
         {
             "id": 8,
-            "start": 42.66,
+            "start": 42.64,
             "end": 44.86,
             "original_text": "Школа англійської Грін Форест.",
-            "translated_text": "Escuela de Inglés Green Forest.",
+            "translated_text": "Green Forest School of English.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_8.wav",
+            "status": "rendered"
         },
         {
             "id": 9,
             "start": 45.52,
             "end": 49.78,
             "original_text": "У нас так багато страхів, але мрій більше.",
-            "translated_text": "Tenemos tantos miedos, pero más sueños.",
+            "translated_text": "We have so many fears, but more dreams.",
             "speaker_id": "SPEAKER_00",
             "gender": "Female",
             "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
-        },
-        {
-            "id": 10,
-            "start": 49.78,
-            "end": 79.76,
-            "original_text": "Дякую за перегляд!",
-            "translated_text": "¡Gracias por mirar!",
-            "speaker_id": "SPEAKER_00",
-            "gender": "Female",
-            "voice_id": null,
-            "audio_path": null,
-            "status": "transcribed"
+            "audio_path": "projects\\cache_audio\\seg_9.wav",
+            "status": "rendered"
         }
     ]
 }
