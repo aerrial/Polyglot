@@ -34,6 +34,44 @@ class LocalizationController(QObject):
         self.translate_service = TranslateService()
         self.tts_service = TTSService()
 
+    @classmethod
+    def load_from_json(cls, json_path: str):
+        """Фабричний метод: створює контролер на основі збереженого JSON-файлу"""
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Створюємо базовий екземпляр з шляхом до оригінального відео
+        instance = cls(data["video_path"])
+        
+        # Перезаписуємо параметри проєкту з JSON
+        p = instance.project
+        p.project_name = data.get("project_name", p.project_name)
+        p.source_lang = data.get("source_lang", "auto")
+        p.target_lang = data.get("target_lang", "en")
+        p.vocals_path = data.get("vocals_path")
+        p.background_path = data.get("background_path")
+        p.output_video_path = data.get("output_video_path")
+        p.speaker_voice_map = data.get("speaker_voice_map", {})
+        
+        # Відновлюємо сегменти як об'єкти класа TimelineSegment
+        p.segments = []
+        for seg_data in data.get("segments", []):
+            segment = TimelineSegment(
+                id=seg_data["id"],
+                start=seg_data["start"],
+                end=seg_data["end"],
+                original_text=seg_data["original_text"],
+                translated_text=seg_data["translated_text"],
+                speaker_id=seg_data["speaker_id"],
+                gender=seg_data["gender"],
+                status=seg_data["status"]
+            )
+            # Відновлюємо шлях до згенерованої озвучки, якщо вона вже була
+            segment.audio_path = seg_data.get("audio_path")
+            p.segments.append(segment)
+            
+        return instance
+
     def _get_video_duration_ffprobe(self, path: str) -> float:
         """Оптимізоване нативне отримання тривалості відео через ffprobe БЕЗ MoviePy"""
         try:
