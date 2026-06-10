@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QFileDialog, QInputDialog, QTextEdit, QFrame, QDialog, QDialogButtonBox,
     QCheckBox, QLineEdit, QFormLayout, QComboBox, QMessageBox
 )
+from PySide6.QtGui import QColor, QPalette
 from controllers.localization_controller import LocalizationController
 
 # Модульні імпорти компонентів
@@ -20,6 +21,7 @@ from ui.components.panels import Panel
 from ui.components.speaker_widget import SpeakerRowWidget
 from ui.components.segment_card import SegmentCardWidget
 from ui.components.projects_tab import ProjectsTabWidget
+from ui.styles import get_dark_qss, get_light_qss
 
 class PolyGlotWindow(QMainWindow):
     def __init__(self):
@@ -68,7 +70,7 @@ class PolyGlotWindow(QMainWindow):
 
         top_layout.addSpacing(30)
         
-        # Залишаємо тільки дві функціональні кнопки (Workspace і Voices прибрано)
+        # Залишаємо тільки дві функціональні кнопки
         self.nav_buttons = {}
         for item in ["Projects", "Settings"]:
             btn = QPushButton(item)
@@ -81,6 +83,12 @@ class PolyGlotWindow(QMainWindow):
             top_layout.addWidget(btn)
 
         top_layout.addStretch()
+
+        self.theme_btn = QPushButton("🌙 Темна тема")  # Початковий стан
+        self.theme_btn.setCheckable(True)
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        top_layout.addWidget(self.theme_btn)
+
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("WarningBadge")
         top_layout.addWidget(self.status_label)
@@ -104,7 +112,7 @@ class PolyGlotWindow(QMainWindow):
         editor_layout.setContentsMargins(0, 0, 0, 0)
         
         self.transcript_list = QListWidget()
-        self.transcript_list.setStyleSheet("background: #0D0D0D; border: none;")
+        self.transcript_list.setObjectName("TranscriptList")
         editor_layout.addWidget(self.transcript_list)
 
         self.btn_confirm = QPushButton("ПІДТВЕРДИТИ ТЕКСТ")
@@ -125,6 +133,7 @@ class PolyGlotWindow(QMainWindow):
         mid_layout = QVBoxLayout(mid_container)
         mid_layout.setSpacing(15)
         mid_layout.setContentsMargins(0,0,0,0)
+        mid_container.setObjectName("MidContainer")
 
         self.video_widget = QVideoWidget()
         self.video_widget.setObjectName("VideoPlayer")
@@ -134,15 +143,17 @@ class PolyGlotWindow(QMainWindow):
         
         player_controls = QHBoxLayout()
         self.play_btn = QPushButton("▶")
+        self.play_btn.setObjectName("PlayButton")
         self.play_btn.setFixedWidth(50)
         self.play_btn.clicked.connect(self.toggle_playback)
         
         self.time_slider = QSlider(Qt.Horizontal)
+        self.time_slider.setObjectName("TimeSlider")
         self.time_slider.setRange(0, 0)
         self.time_slider.sliderMoved.connect(self.set_player_position)
         
         self.lbl_time = QLabel("00:00 / 00:00")
-        self.lbl_time.setStyleSheet("font-family: 'Consolas'; font-size: 12px;")
+        self.lbl_time.setObjectName("TimeLabel")
         
         player_controls.addWidget(self.play_btn)
         player_controls.addWidget(self.time_slider)
@@ -167,17 +178,14 @@ class PolyGlotWindow(QMainWindow):
 
         self.speaker_panel = Panel("Speaker Inspector")
         self.speaker_list = QListWidget()
-        self.speaker_list.setStyleSheet("""
-            QListWidget { background: #121212; border: 1px solid #27272A; border-radius: 6px; }
-            QListWidget::item { background: #18181B; margin: 4px 8px; border-radius: 4px; border: 1px solid #27272A; }
-            QListWidget::item:hover { border-color: #3F3F46; }
-        """)
+        self.speaker_list.setObjectName("SpeakerList")
         self.speaker_panel.body.addWidget(self.speaker_list)
 
         self.pipeline_panel = Panel("AI Pipeline Progress")
         self.progress_widgets = {}
         for step in ["Overall", "Audio", "STT", "Translate", "Synthesis"]:
             lbl = QLabel(f"{step} Process:")
+            lbl.setObjectName("ProgressLabel")
             bar = QProgressBar()
             bar.setValue(0)
             self.pipeline_panel.body.addWidget(lbl)
@@ -286,10 +294,13 @@ class PolyGlotWindow(QMainWindow):
         btn = self.nav_buttons.get("Projects")
         if self.left_side_stack.currentIndex() == 0:
             self.projects_tab.scan_projects_folder()
-            self.animate_left_panel_transition(1, "📦 ПРОЄКТИ")
+            self.animate_left_panel_transition(1, "ПРОЄКТИ")
             self.add_log("📂 Відображення менеджера локальних проєктів у бічній панелі.")
             if btn:
-                btn.setStyleSheet("QPushButton { background: rgba(139, 124, 255, 0.2); border: 1px solid #8B7CFF; color: #FFFFFF; font-weight: bold; }")
+                if self.theme_btn.isChecked():
+                    btn.setStyleSheet("QPushButton { background: rgba(139, 124, 255, 0.15); border: 2px solid #8B7CFF; color: #6200ee; font-weight: bold; }")
+                else:
+                    btn.setStyleSheet("QPushButton { background: rgba(139, 124, 255, 0.2); border: 1px solid #8B7CFF; color: #FFFFFF; font-weight: bold; }")
         else:
             self.show_workspace_action()
 
@@ -331,33 +342,51 @@ class PolyGlotWindow(QMainWindow):
         dialog.setWindowTitle("PolyGlot AI Studio — Конфігурація системи")
         dialog.setMinimumWidth(600)
         
-        dialog.setStyleSheet("""
-            QDialog { background-color: #0D0D0E; }
-            QLabel { color: #A1A1AA; font-size: 12px; font-weight: 500; }
-            QGroupBox { 
-                background-color: #151516; border: 1px solid #27272A; border-radius: 8px; 
-                margin-top: 16px; padding-top: 12px; font-weight: bold; color: #FFFFFF;
-            }
-            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; margin-left: 10px; color: #8B7CFF; }
-            QLineEdit, QComboBox { background-color: #202022; border: 1px solid #27272A; border-radius: 6px; padding: 6px 10px; color: #FFFFFF; font-size: 12px; }
-            QLineEdit:focus, QComboBox:focus { border-color: #8B7CFF; }
-            QCheckBox { color: #E4E4E7; font-size: 12px; spacing: 8px; }
-            QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #3F3F46; border-radius: 4px; background: #202022; }
-            QCheckBox::indicator:checked { background-color: #8B7CFF; border-color: #8B7CFF; }
-        """)
+        if self.theme_btn.isChecked():
+            dialog.setStyleSheet("""
+                QDialog { background-color: #f8f9fa; }
+                QLabel { color: #2e2e2e; font-size: 12px; font-weight: 500; }
+                QGroupBox { 
+                    background-color: #ffffff; border: 1px solid #ced4da; border-radius: 8px; 
+                    margin-top: 16px; padding-top: 12px; font-weight: bold; color: #2e2e2e;
+                }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; margin-left: 10px; color: #6200ee; }
+                QLineEdit, QComboBox { background-color: #ffffff; border: 1px solid #ced4da; border-radius: 6px; padding: 6px 10px; color: #1c1b1f; font-size: 12px; }
+                QLineEdit:focus, QComboBox:focus { border-color: #8B7CFF; }
+                QCheckBox { color: #2e2e2e; font-size: 12px; spacing: 8px; }
+                QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #ced4da; border-radius: 4px; background: #ffffff; }
+                QCheckBox::indicator:checked { background-color: #8B7CFF; border-color: #8B7CFF; }
+            """)
+        else:
+            dialog.setStyleSheet("""
+                QDialog { background-color: #0D0D0E; }
+                QLabel { color: #A1A1AA; font-size: 12px; font-weight: 500; }
+                QGroupBox { 
+                    background-color: #151516; border: 1px solid #27272A; border-radius: 8px; 
+                    margin-top: 16px; padding-top: 12px; font-weight: bold; color: #FFFFFF;
+                }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; margin-left: 10px; color: #8B7CFF; }
+                QLineEdit, QComboBox { background-color: #202022; border: 1px solid #27272A; border-radius: 6px; padding: 6px 10px; color: #FFFFFF; font-size: 12px; }
+                QLineEdit:focus, QComboBox:focus { border-color: #8B7CFF; }
+                QCheckBox { color: #E4E4E7; font-size: 12px; spacing: 8px; }
+                QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #3F3F46; border-radius: 4px; background: #202022; }
+                QCheckBox::indicator:checked { background-color: #8B7CFF; border-color: #8B7CFF; }
+            """)
         
         main_vertical_layout = QVBoxLayout(dialog)
         main_vertical_layout.setContentsMargins(20, 10, 20, 20)
         main_vertical_layout.setSpacing(10)
         
-        # --- СЕКЦІЯ 1: Переклад ---
         group_translation = QGroupBox("Модуль перекладу та локалізації")
         trans_layout = QFormLayout(group_translation)
         trans_layout.setSpacing(12)
         
         cb_mode = QCheckBox("Увімкнути розумний Lipsync (Gemini 1.5 Flash LLM)")
         cb_mode.setChecked(settings.TRANSLATION_MODE_LLM)
-        cb_mode.setStyleSheet("font-weight: 600; color: #FFFFFF;")
+        if self.theme_btn.isChecked():
+            cb_mode.setStyleSheet("font-weight: 600; color: #1c1b1f;")
+        else:
+            cb_mode.setStyleSheet("font-weight: 600; color: #FFFFFF;")
         trans_layout.addRow(cb_mode)
         
         le_key = QLineEdit(settings.GEMINI_API_KEY)
@@ -371,7 +400,6 @@ class PolyGlotWindow(QMainWindow):
         trans_layout.addRow("Цільова мова за замовчуванням:", combo_lang)
         main_vertical_layout.addWidget(group_translation)
         
-        # --- СЕКЦІЯ 2: Whisper STT ---
         group_stt = QGroupBox("Параметри розпізнавання (Whisper STT)")
         stt_layout = QFormLayout(group_stt)
         stt_layout.setSpacing(12)
@@ -382,7 +410,6 @@ class PolyGlotWindow(QMainWindow):
         stt_layout.addRow("Нейронна модель розпізнавання:", combo_whisper)
         main_vertical_layout.addWidget(group_stt)
         
-        # --- СЕКЦІЯ 3: Кеш ---
         group_system = QGroupBox("Обслуговування системи")
         system_layout = QHBoxLayout(group_system)
         system_layout.setContentsMargins(15, 15, 15, 15)
@@ -401,14 +428,23 @@ class PolyGlotWindow(QMainWindow):
         current_cache_size = get_cache_size_mb()
         
         lbl_cache_info = QLabel(f"Тимчасові ШІ-файли (Аудіо, Вокал, Фон).<br>Зайнято на диску: <b style='color: #8B7CFF;'>{current_cache_size:.1f} МБ</b>")
-        lbl_cache_info.setStyleSheet("color: #A1A1AA; line-height: 15px;")
+        if self.theme_btn.isChecked():
+            lbl_cache_info.setStyleSheet("color: #495057; line-height: 15px;")
+        else:
+            lbl_cache_info.setStyleSheet("color: #A1A1AA; line-height: 15px;")
         
         btn_clear_cache = QPushButton("🗑️ Очистити кеш")
         btn_clear_cache.setFixedWidth(140)
-        btn_clear_cache.setStyleSheet("""
-            QPushButton { background-color: #27272A; border: 1px solid #3F3F46; color: #F4F4F5; font-weight: 600; padding: 6px; border-radius: 6px; }
-            QPushButton:hover { background-color: #7f1d1d; border-color: #ef4444; color: #FFFFFF; }
-        """)
+        if self.theme_btn.isChecked():
+            btn_clear_cache.setStyleSheet("""
+                QPushButton { background-color: #e9ecef; border: 1px solid #ced4da; color: #212529; font-weight: 600; padding: 6px; border-radius: 6px; }
+                QPushButton:hover { background-color: #dc3545; border-color: #dc3545; color: #FFFFFF; }
+            """)
+        else:
+            btn_clear_cache.setStyleSheet("""
+                QPushButton { background-color: #27272A; border: 1px solid #3F3F46; color: #F4F4F5; font-weight: 600; padding: 6px; border-radius: 6px; }
+                QPushButton:hover { background-color: #7f1d1d; border-color: #ef4444; color: #FFFFFF; }
+            """)
         
         def clear_cache_action():
             deleted_counts = 0
@@ -435,14 +471,21 @@ class PolyGlotWindow(QMainWindow):
         group_system.setLayout(system_layout)
         main_vertical_layout.addWidget(group_system)
         
-        # Фінальні кнопки Ok/Cancel
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
-        buttons.setStyleSheet("""
-            QPushButton { background-color: #202022; border: 1px solid #27272A; color: #FFFFFF; padding: 6px 20px; border-radius: 6px; min-width: 80px; }
-            QPushButton:hover { background-color: #27272A; }
-            QPushButton[text="OK"] { background-color: #8B7CFF; color: #000000; font-weight: 600; border: none; }
-            QPushButton[text="OK"]:hover { background-color: #A396FF; }
-        """)
+        if self.theme_btn.isChecked():
+            buttons.setStyleSheet("""
+                QPushButton { background-color: #e9ecef; border: 1px solid #ced4da; color: #212529; padding: 6px 20px; border-radius: 6px; min-width: 80px; }
+                QPushButton:hover { background-color: #dee2e6; }
+                QPushButton[text="OK"] { background-color: #8B7CFF; color: #000000; font-weight: 600; border: none; }
+                QPushButton[text="OK"]:hover { background-color: #7c4dff; color: #ffffff; }
+            """)
+        else:
+            buttons.setStyleSheet("""
+                QPushButton { background-color: #202022; border: 1px solid #27272A; color: #FFFFFF; padding: 6px 20px; border-radius: 6px; min-width: 80px; }
+                QPushButton:hover { background-color: #27272A; }
+                QPushButton[text="OK"] { background-color: #8B7CFF; color: #000000; font-weight: 600; border: none; }
+                QPushButton[text="OK"]:hover { background-color: #A396FF; }
+            """)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         main_vertical_layout.addWidget(buttons)
@@ -531,6 +574,34 @@ class PolyGlotWindow(QMainWindow):
             self.media_player.play()
             self.play_btn.setText("⏸")
 
+    def toggle_theme(self, checked):
+        self.apply_styles()
+        
+        # 1. Оновлюємо стилі карток реплік у списку редактора
+        for i in range(self.transcript_list.count()):
+            item = self.transcript_list.item(i)
+            card = self.transcript_list.itemWidget(item)
+            if card and hasattr(card, 'apply_card_styles'):
+                card.apply_card_styles()
+                
+        # 2. Оновлюємо стилі рядків в інспекторі спікерів
+        for i in range(self.speaker_list.count()):
+            item = self.speaker_list.item(i)
+            row = self.speaker_list.itemWidget(item)
+            if row and hasattr(row, 'apply_row_styles'):
+                row.apply_row_styles()
+                
+        # 3. Оновлюємо стилі вкладки архіву проєктів та її внутрішніх карток
+        if hasattr(self, 'projects_tab') and self.projects_tab:
+            self.projects_tab.apply_tab_styles()
+                
+        if checked:
+            self.theme_btn.setText("☀️ Світла тема")
+            self.add_log("🎨 Активовано світлу тему")
+        else:
+            self.theme_btn.setText("🌙 Темна тема")
+            self.add_log("🎨 Активовано темну тему")
+
     @Slot(str, str)
     def on_pipeline_step_completed(self, step_type, media_path):
         if step_type == "ANALYSIS_DONE":
@@ -567,32 +638,99 @@ class PolyGlotWindow(QMainWindow):
         self.status_label.setText(message)
 
     def apply_styles(self):
-        self.setStyleSheet("""
-            QMainWindow { background: #0A0A0A; }
-            QWidget { color: #E0E0E0; font-family: 'Inter', sans-serif; }
-            #TopBar { background: #111111; border-bottom: 1px solid #1F1F1F; }
-            #Logo { font-size: 16px; font-weight: 900; color: #8B7CFF; margin-right: 15px; letter-spacing: 1px; }
-            
-            QPushButton#NavButton {
-                background: #18181B; border: 1px solid #27272A; border-radius: 6px;
-                color: #A1A1AA; font-weight: 500; font-size: 12px; padding: 6px 14px; min-width: 85px;
-            }
-            QPushButton#NavButton:hover { background: #27272A; border-color: #3F3F46; color: #FFFFFF; }
-            QPushButton#NavButton:pressed { border-color: #8B7CFF; background: rgba(139, 124, 255, 0.1); }
-            
-            #NewProjectButton { background: #8B7CFF; color: black; border-radius: 8px; padding: 6px 14px; font-weight: 600; }
-            #NewProjectButton:disabled { background: #333; color: #666; }
-            #Panel { background: #121212; border: 1px solid #1F1F1F; border-radius: 20px; }
-            #PanelTitle { color: #555; font-size: 13px; font-weight: 800; text-transform: uppercase; }
-            #LogConsole { background: #080808; border: none; font-family: 'Consolas'; font-size: 11px; color: #8B7CFF; }
-            #VideoPlayer { background: #000; border-radius: 20px; }
-            
-            #WarningBadge { 
-                background: rgba(139, 124, 255, 0.07); color: #8B7CFF; border: 1px solid rgba(139, 124, 255, 0.25); 
-                border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 500;
-            }
-            QProgressBar { background: #1A1A1A; border-radius: 4px; height: 6px; text-align: center; color: transparent; }
-            QProgressBar::chunk { background: #8B7CFF; }
-            QSlider::groove:horizontal { height: 4px; background: #222; border-radius: 2px; }
-            QSlider::handle:horizontal { background: #8B7CFF; width: 12px; margin-top: -4px; margin-bottom: -4px; border-radius: 6px; }
-        """)
+        if self.theme_btn.isChecked():
+            # --- ПРЕМІАЛЬНА М'ЯКА СВІТЛА ТЕМА ---
+            # Змушуємо QVideoWidget підкорятися стилям QSS
+            self.video_widget.setAttribute(Qt.WA_StyledBackground, True)
+
+            self.setStyleSheet("""
+                QMainWindow { background: #f4f4f6; }
+                QWidget { color: #1c1b1f; font-family: 'Inter', sans-serif; }
+                
+                QSplitter::handle { background: #e2e4e9; }
+                #MidContainer { background: #f4f4f6; }
+                
+                #TopBar { background: #fcfcfd; border-bottom: 1px solid #e2e4e9; }
+                #Logo { font-size: 16px; font-weight: 900; color: #6200ee; margin-right: 15px; letter-spacing: 1px; }
+                
+                QPushButton#NavButton {
+                    background: #fcfcfd; border: 1px solid #ced4da; border-radius: 6px;
+                    color: #495057; font-weight: 500; font-size: 12px; padding: 6px 14px; min-width: 85px;
+                }
+                QPushButton#NavButton:hover { background: #f4f4f6; border-color: #adb5bd; color: #212529; }
+                
+                #NewProjectButton { background: #6200ee; color: white; border-radius: 8px; padding: 6px 14px; font-weight: 600; }
+                #NewProjectButton:disabled { background: #e2e4e9; color: #adb5bd; }
+                
+                #Panel { background: #fcfcfd; border: 1px solid #ced4da; border-radius: 20px; }
+                #PanelTitle { color: #71717a; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+                
+                #TranscriptList { background: #fafafa; border: none; }
+                #SpeakerList { background: #fcfcfd; border: 1px solid #ced4da; border-radius: 6px; }
+                
+                #LogConsole { background: #fcfcfd; border: 1px solid #ced4da; font-family: 'Consolas'; font-size: 11px; color: #212529; border-radius: 8px; }
+                
+                /* Фікс плеєра у світлій темі */
+                #VideoPlayer { background-color: #e2e4e9; border-radius: 20px; border: 1px solid #ced4da; }
+                
+                #WarningBadge { 
+                    background: rgba(98, 0, 238, 0.05); color: #6200ee; border: 1px solid rgba(98, 0, 238, 0.15); 
+                    border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: 500;
+                }
+                QProgressBar { background: #e2e4e9; border-radius: 4px; height: 6px; text-align: center; color: transparent; border: 1px solid #ced4da; }
+                QProgressBar::chunk { background: #6200ee; }
+                QSlider::groove:horizontal { height: 4px; background: #ced4da; border-radius: 2px; }
+                QSlider::handle:horizontal { background: #6200ee; width: 12px; margin-top: -4px; margin-bottom: -4px; border-radius: 6px; }
+                
+                QPushButton#PlayButton { background: #fcfcfd; border: 1px solid #ced4da; border-radius: 4px; color: #212529; }
+                QPushButton#PlayButton:hover { background: #f4f4f6; }
+                QLabel#TimeLabel { font-family: 'Consolas'; font-size: 12px; color: #212529; }
+            """)
+        else:
+            # --- ОРИГІНАЛЬНА ТЕМНА ТЕМА ---
+            self.video_widget.setAttribute(Qt.WA_StyledBackground, True)
+
+            self.setStyleSheet("""
+                QMainWindow { background: #0A0A0A; }
+                QWidget { color: #E0E0E0; font-family: 'Inter', sans-serif; }
+                
+                QSplitter::handle { background: #1F1F1F; }
+                #MidContainer { background: #0A0A0A; }
+                
+                #TopBar { background: #111111; border-bottom: 1px solid #1F1F1F; }
+                #Logo { font-size: 16px; font-weight: 900; color: #8B7CFF; margin-right: 15px; letter-spacing: 1px; }
+                
+                QPushButton#NavButton {
+                    background: #18181B; border: 1px solid #27272A; border-radius: 6px;
+                    color: #A1A1AA; font-weight: 500; font-size: 12px; padding: 6px 14px; min-width: 85px;
+                }
+                QPushButton#NavButton:hover { background: #27272A; border-color: #3F3F46; color: #FFFFFF; }
+                
+                #NewProjectButton { background: #8B7CFF; color: black; border-radius: 8px; padding: 6px 14px; font-weight: 600; }
+                #NewProjectButton:disabled { background: #333; color: #666; }
+                
+                #Panel { background: #121212; border: 1px solid #1F1F1F; border-radius: 20px; }
+                #PanelTitle { color: #555; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+                
+                #TranscriptList { background: #0D0D0D; border: none; }
+                #SpeakerList { background: #121212; border: 1px solid #27272A; border-radius: 6px; }
+                
+                #LogConsole { background: #080808; border: none; font-family: 'Consolas'; font-size: 11px; color: #8B7CFF; }
+                
+                /* Плеєр у темній темі лишається канонічним чорним */
+                #VideoPlayer { background-color: #000000; border-radius: 20px; }
+                
+                /* ВІДНОВЛЕНИЙ СТИЛЬ WARNING BADGE ДЛЯ ТЕМНОЇ ТЕМИ */
+                #WarningBadge { 
+                    background: rgba(139, 124, 255, 0.07); color: #8B7CFF; border: 1px solid rgba(139, 124, 255, 0.25); 
+                    border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: 500;
+                }
+                
+                QProgressBar { background: #1A1A1A; border-radius: 4px; height: 6px; text-align: center; color: transparent; }
+                QProgressBar::chunk { background: #8B7CFF; }
+                QSlider::groove:horizontal { height: 4px; background: #222; border-radius: 2px; }
+                QSlider::handle:horizontal { background: #8B7CFF; width: 12px; margin-top: -4px; margin-bottom: -4px; border-radius: 6px; }
+                
+                QPushButton#PlayButton { background: #18181B; border: 1px solid #27272A; color: #E0E0E0; }
+                QLabel#TimeLabel { font-family: 'Consolas'; font-size: 12px; color: #E0E0E0; }
+            """)

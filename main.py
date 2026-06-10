@@ -1,4 +1,3 @@
-#актуально
 #main.py
 import sys
 import asyncio
@@ -11,8 +10,10 @@ os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "windowsmediafoundation"
 os.environ["FFMPEG_HARDWARE_ACCELERATION"] = "none"
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 
+
 def main():
     app = QApplication(sys.argv)
+    
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
 

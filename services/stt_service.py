@@ -19,7 +19,6 @@ class STTService:
         if not self.diarization_pipeline:
             self.diarization_pipeline = get_diarization_pipeline()
 
-            # КЛЮЧОВА ОПТИМІЗАЦІЯ: діаризацію тримаємо на CPU
             try:
                 self.diarization_pipeline.to(torch.device("cpu"))
                 print("[STT] Diarization moved to CPU to save VRAM")
@@ -38,7 +37,7 @@ class STTService:
         waveform, sample_rate = torchaudio.load(audio_path)
 
         # ---------------------------
-        # 2. DIARIZATION (CPU)
+        # 2. DIARIZATION 
         # ---------------------------
         if progress_callback:
             progress_callback(15)
@@ -52,7 +51,7 @@ class STTService:
             progress_callback(35)
 
         # ---------------------------
-        # 3. WHISPER TRANSCRIPTION (МАКСИМАЛЬНА ТОЧНІСТЬ)
+        # 3. WHISPER TRANSCRIPTION 
         # ---------------------------
         segments, info = self.whisper_model.transcribe(
             audio_path,
@@ -73,7 +72,6 @@ class STTService:
         for seg in segments:
             segments_list.append(seg)
             if progress_callback and info.duration > 0:
-                # Розподіляємо шкалу від 35% до 90% для Whisper
                 percent = 35 + int((seg.end / info.duration) * 55)
                 progress_callback(min(percent, 90))
 
@@ -106,13 +104,11 @@ class STTService:
             )
             timeline_segments.append(new_seg)
 
-            # ФІКС БАГУ: Вирізаємо зразок голосу для XTTS, якщо його ще немає
             if best_speaker != "Unknown" and best_speaker not in speaker_samples:
-                # Обчислюємо межі зразка в контексті аудіо-масиву (в семплах)
                 start_sample = int(seg.start * sample_rate)
                 end_sample = int(seg.end * sample_rate)
                 
-                # Вирізаємо аудіо-шматок (чиста нарізка тензора)
+                # Вирізаємо аудіо-шматок
                 speaker_wav_tensor = waveform[:, start_sample:end_sample]
                 
                 # Тільки якщо репліка довша за 1.5 секунди (щоб еталон голосу був якісним)
@@ -129,9 +125,6 @@ class STTService:
             if seg.speaker_id != "Unknown" and seg.speaker_id not in speaker_samples:
                 speaker_samples[seg.speaker_id] = audio_path  # Фолбек на повний вокал
 
-        # ---------------------------
-        # 5. CLEAN VRAM HARD
-        # ---------------------------
         del waveform
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

@@ -6,13 +6,14 @@ from qasync import asyncSlot
 from core.project import TimelineSegment
 
 class SegmentCardWidget(QWidget):
-    """Інтерактивна картка таймлайну з вбудованим ШІ-перекладом при редагуванні"""
     def __init__(self, segment: TimelineSegment, controller, parent_window):
         super().__init__()
         self.segment = segment
         self.controller = controller
         self.parent_window = parent_window 
+        self.setObjectName("SegmentCardWidget")
         self.init_ui()
+        self.apply_card_styles()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -20,9 +21,9 @@ class SegmentCardWidget(QWidget):
 
         meta_layout = QHBoxLayout()
         time_str = f"🕒 {int(self.segment.start // 60):02}:{int(self.segment.start % 60):02}"
-        lbl_meta = QLabel(f"{time_str} | {self.segment.speaker_id}")
-        lbl_meta.setStyleSheet("color: #8B7CFF; font-weight: bold; font-size: 11px;")
-        meta_layout.addWidget(lbl_meta)
+        self.lbl_meta = QLabel(f"{time_str} | {self.segment.speaker_id}")
+        self.lbl_meta.setObjectName("MetaLabel")
+        meta_layout.addWidget(self.lbl_meta)
         meta_layout.addStretch()
         main_layout.addLayout(meta_layout)
 
@@ -30,17 +31,44 @@ class SegmentCardWidget(QWidget):
         
         self.edit_orig = QTextEdit(self.segment.original_text)
         self.edit_orig.setFixedHeight(50)
-        self.edit_orig.setStyleSheet("background: #111; border: 1px solid #222; color: #aaa;")
+        self.edit_orig.setObjectName("EditOriginal")
         self.edit_orig.textChanged.connect(self.on_original_changed)
         
         self.edit_trans = QTextEdit(self.segment.translated_text)
         self.edit_trans.setFixedHeight(50)
-        self.edit_trans.setStyleSheet("background: #222; border: 1px solid #333; color: #fff;")
+        self.edit_trans.setObjectName("EditTranslated")
         self.edit_trans.textChanged.connect(self.on_translation_changed)
 
         fields_layout.addWidget(self.edit_orig)
         fields_layout.addWidget(self.edit_trans)
         main_layout.addLayout(fields_layout)
+
+    def apply_card_styles(self):
+        # Динамічно адаптуємо кольори картки під тему головного вікна
+        is_light = self.parent_window.theme_btn.isChecked() if self.parent_window else False
+
+        if is_light:
+            # Світла тема
+            self.lbl_meta.setStyleSheet("color: #6200ee; font-weight: bold; font-size: 11px;")
+            self.edit_orig.setStyleSheet("""
+                QTextEdit { background: #f1f3f4; border: 1px solid #ced4da; color: #5f6368; border-radius: 4px; }
+                QTextEdit:focus { border: 2px solid #6200ee; background: #ffffff; color: #1c1b1f; }
+            """)
+            self.edit_trans.setStyleSheet("""
+                QTextEdit { background: #ffffff; border: 1px solid #ced4da; color: #1c1b1f; border-radius: 4px; font-weight: 500; }
+                QTextEdit:focus { border: 2px solid #6200ee; }
+            """)
+        else:
+            # темна тема
+            self.lbl_meta.setStyleSheet("color: #8B7CFF; font-weight: bold; font-size: 11px;")
+            self.edit_orig.setStyleSheet("""
+                QTextEdit { background: #111111; border: 1px solid #222222; color: #aaaaaa; border-radius: 4px; }
+                QTextEdit:focus { border: 1px solid #8B7CFF; color: #ffffff; }
+            """)
+            self.edit_trans.setStyleSheet("""
+                QTextEdit { background: #222222; border: 1px solid #333333; color: #ffffff; border-radius: 4px; }
+                QTextEdit:focus { border: 1px solid #8B7CFF; }
+            """)
 
     def on_translation_changed(self):
         new_text = self.edit_trans.toPlainText()

@@ -1,0 +1,62 @@
+{
+    "video_path": "C:\\unik\\diplom\\data\\input4.mp4",
+    "project_name": "input4",
+    "source_lang": "auto",
+    "target_lang": "en",
+    "vocals_path": "C:\\unik\\diplom\\output\\demucs_output\\input4_vocals.wav",
+    "background_path": "C:\\unik\\diplom\\output\\demucs_output\\input4_no_vocals.wav",
+    "output_video_path": "C:\\unik\\diplom\\output\\translated_video.mp4",
+    "speaker_voice_map": {
+        "SPEAKER_00": "C:\\unik\\diplom\\projects\\speaker_samples\\speaker_00.wav"
+    },
+    "segments": [
+        {
+            "id": 0,
+            "start": 0.37,
+            "end": 7.53,
+            "original_text": "Вона була єдиною і улюбленою донькою голови Центральної Ради, історика Михайла Грушевського.",
+            "translated_text": "She was the only and beloved daughter of the chairman of the Central Rada, historian Mykhailo Hrushevskyi.",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_0.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 1,
+            "start": 8.07,
+            "end": 13.37,
+            "original_text": "Від нього Катруся успадкувала дві характерні риси – любов до науки та любов до України.",
+            "translated_text": "From him, she inherited two specific traits - love for science and love for Ukraine.",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_1.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 2,
+            "start": 13.71,
+            "end": 19.75,
+            "original_text": "Вона досліджувала первісні культури Африки і Америки, глибоко вивчала пам'ятки українського фольклору.",
+            "translated_text": "She researched the primitive cultures of Africa and America and deeply studied the sights of Ukrainian folklore.",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": "projects\\cache_audio\\seg_2.wav",
+            "status": "rendered"
+        },
+        {
+            "id": 3,
+            "start": 19.75,
+            "end": 21.75,
+            "original_text": "",
+            "translated_text": "",
+            "speaker_id": "SPEAKER_00",
+            "gender": "Female",
+            "voice_id": null,
+            "audio_path": null,
+            "status": "rendered"
+        }
+    ]
+}

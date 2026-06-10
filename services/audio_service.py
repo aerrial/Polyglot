@@ -21,7 +21,8 @@ class AudioService:
     def mix_final(self, background_path: str, segments: List[TimelineSegment], video_duration: float, output_path: str) -> str:
         """
         [ОПТИМІЗОВАНО] Чистий FFmpeg Mixer (БЕЗ pydub).
-        Бере збережений фон, накладає нові TTS репліки за таймінгами через adelay та amix.
+        Бере збережений фон, збільшує гучність нових TTS реплік у 2 рази, 
+        та накладає їх за таймінгами через adelay, volume та amix.
         Повертає СТРОКОВИЙ шлях до готового .wav файлу.
         """
         print(f"[Mixer] Початок швидкого зведення аудіо через FFmpeg. Фон: {background_path}")
@@ -46,7 +47,7 @@ class AudioService:
             for seg in valid_segments:
                 cmd.extend(["-i", seg.audio_path])
                 
-            # Будуємо складний фільтр (filter_complex) для зміщування звуку по таймлайну
+            # Будуємо складний фільтр (filter_complex) для зміщування звуку та підсилення
             filter_inputs = "[0:a]"  # Початковий вхід — аудіо з фону (індекс 0)
             filter_graph = ""
             
@@ -54,10 +55,17 @@ class AudioService:
                 # FFmpeg adelay очікує затримку в мілісекундах для кожного каналу (лівий|правий)
                 delay_ms = int(seg.start * 1000)
                 
-                # Застосовуємо затримку до входу (idx + 1), бо 0 - це фон
-                # Приклад: [1:a]adelay=3500|3500[delayed1];
-                filter_graph += f"[{idx+1}:a]adelay={delay_ms}|{delay_ms}[delayed{idx+1}];"
-                filter_inputs += f"[delayed{idx+1}]"
+                # ЛАНЦЮЖОК ФІЛЬТРІВ:
+                # 1. Застосовуємо затримку за таймлайном: adelay
+                # 2. Одразу після цього підсилюємо гучність голосу у 2 рази: volume=2.0
+                # Приклад: [1:a]adelay=3500|3500[delayed1]; [delayed1]volume=2.0[louder1];
+                filter_graph += (
+                    f"[{idx+1}:a]adelay={delay_ms}|{delay_ms}[delayed{idx+1}]; "
+                    f"[delayed{idx+1}]volume=2.0[louder{idx+1}]; "
+                )
+                
+                # Передаємо в amix вже підсилений потік [louderX] замість просто затриманого
+                filter_inputs += f"[louder{idx+1}]"
                 
             # Рахуємо загальну кількість потоків для змішування (фон + кількість реплік)
             total_inputs = len(valid_segments) + 1
